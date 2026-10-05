@@ -49,8 +49,8 @@ Deploy `out/` to any static host:
 
 | Host | How |
 | --- | --- |
+| **Netlify** | Import the repo — `netlify.toml` is already configured (build `npm run build`, publish `out`). |
 | **Vercel** | Import the repo — Next.js is auto-detected; static export is emitted. |
-| **Netlify** | Build command `npm run build`, publish directory `out`. |
 | **GitHub Pages (project site)** | Build with `NEXT_PUBLIC_BASE_PATH=/Fragrance npm run build`, publish `out/` (e.g. via Actions). The site then lives at `https://<user>.github.io/Fragrance/`. |
 
 ## Managing products (admin)
