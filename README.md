@@ -1,37 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Shri Fragrance — Landing Page
 
-## Getting Started
+A completely **serverless** landing page for Shri Fragrance (sacred South Indian
+agarbathi), with a built-in content manager for adding and deleting products.
 
-First, run the development server:
+There is **no backend**: no Node server, no database, no API keys required to run
+the site. The whole site is a static export that can be hosted for free anywhere,
+and the product catalog lives in a JSON file inside this very repository.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## How it works
+
+```
+public/products.json  ←  single source of truth (committed to this repo)
+        ↑ read                    ↑ write
+        |                         |
+  Landing page (/)          Admin CMS (/admin/)
+  baked at build time,      commits products.json via
+  then refreshed live from  the GitHub Contents API
+  raw.githubusercontent.com with a personal access token
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Landing page (`/`)** — hero, product grid, heritage and contact sections.
+  The catalog copy baked at build time renders instantly; the page then pulls
+  the latest JSON from `raw.githubusercontent.com`, so admin edits appear
+  within a minute or so without redeploying.
+- **Product Manager (`/admin/`)** — connect with a GitHub fine-grained
+  personal access token, then **add** or **delete** products. Every action is
+  a commit to `public/products.json`. The token is stored only in the
+  admin's browser (localStorage).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Orders/enquiries happen over phone, WhatsApp, and email (buttons on the page) —
+there is deliberately no cart or checkout.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Run locally
 
-## Learn More
+```bash
+npm install
+npm run dev        # http://localhost:3000
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Build & host (fully static)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run build      # produces out/
+npm run preview    # serve the export locally
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Deploy `out/` to any static host:
 
-## Deploy on Vercel
+| Host | How |
+| --- | --- |
+| **Vercel** | Import the repo — Next.js is auto-detected; static export is emitted. |
+| **Netlify** | Build command `npm run build`, publish directory `out`. |
+| **GitHub Pages (project site)** | Build with `NEXT_PUBLIC_BASE_PATH=/Fragrance npm run build`, publish `out/` (e.g. via Actions). The site then lives at `https://<user>.github.io/Fragrance/`. |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Managing products (admin)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# Fragrance
+1. Open `/admin/` (link in the footer: *Product Manager*).
+2. Create a **fine-grained personal access token**:
+   <https://github.com/settings/personal-access-tokens/new>
+   - Repository access → *Only select repositories* → this repo.
+   - Permissions → *Contents: Read and write*.
+3. Paste the token, check the owner/repo/branch fields, and **Connect**.
+4. Add a product (name, category, price, image URL, description) or delete
+   one. Each action commits `public/products.json`; the commit link is shown.
+
+To point the admin at a fork, just change the owner/repo/branch fields before
+connecting, and update `DEFAULT_GH` in `src/lib/products.ts` so the landing
+page reads the same repo.
+
+## Repo layout
+
+```
+public/products.json     ← catalog (source of truth)
+src/app/page.tsx         ← landing page
+src/app/admin/page.tsx   ← product manager (add/delete)
+src/lib/products.ts      ← catalog read (baked + live) & GitHub write helpers
+public/images/           ← bundled product & brand images
+```

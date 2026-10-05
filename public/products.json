@@ -1,0 +1,68 @@
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Javathu",
+      "category": "Floral",
+      "price": 299,
+      "image": "/images/product1.png",
+      "description": "Traditional javathu buds blended into a soft, powdery floral — the everyday fragrance of South Indian homes and pooja rooms."
+    },
+    {
+      "id": 2,
+      "name": "Jasmine",
+      "category": "Floral",
+      "price": 249,
+      "image": "/images/product2.png",
+      "description": "Madurai mullai picked at dawn and hand-rolled into sticks — a sweet white-floral that fills the home like a temple courtyard at dusk."
+    },
+    {
+      "id": 3,
+      "name": "Champa",
+      "category": "Floral",
+      "price": 279,
+      "image": "/images/product3.png",
+      "description": "Classic nag champa with its warm, resinous depth — the scent of deep darshan hours and quiet evening prayers."
+    },
+    {
+      "id": 4,
+      "name": "Lavender",
+      "category": "Herbal",
+      "price": 269,
+      "image": "/images/product4.png",
+      "description": "Cooling herbal lavender, sun-dried and blended for a soothing, meditative atmosphere."
+    },
+    {
+      "id": 5,
+      "name": "Screw Pine",
+      "category": "Floral",
+      "price": 319,
+      "image": "/images/product5.png",
+      "description": "Kewra — the fragrant screw pine of the Tamil coast — distilled into a rich, vanilla-tinged floral beloved for festive occasions."
+    },
+    {
+      "id": 6,
+      "name": "Rose",
+      "category": "Floral",
+      "price": 259,
+      "image": "/images/product6.png",
+      "description": "Panneer rose petals from the temple gardens, layered into a deep, velvety fragrance for abhishekam and archana."
+    },
+    {
+      "id": 7,
+      "name": "Sandal",
+      "category": "Premium",
+      "price": 399,
+      "image": "/images/product1.png",
+      "description": "Pure Mysore sandalwood, ground and blended the traditional way — the most sacred of all offerings, warm and long-lasting."
+    },
+    {
+      "id": 8,
+      "name": "Sacred Resin",
+      "category": "Premium",
+      "price": 499,
+      "image": "/images/product5.png",
+      "description": "Guggul and frankincense resins over charcoal — the ancient smoke of homams and temple sanctums, in stick form."
+    }
+  ]
+}
