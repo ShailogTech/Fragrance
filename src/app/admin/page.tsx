@@ -29,6 +29,7 @@ import {
   UserPlus, Shield, Lock, BellRing, Globe, Palette,
 } from "lucide-react";
 import { adminProductsSeed as productsList, fetchCatalog, saveCatalog } from "@/lib/catalog";
+import { auth } from "@/lib/firebase";
 
 // ── Color Palette ──────────────────────────────────────
 const colors = {
@@ -306,6 +307,14 @@ export default function AdminDashboard() {
   ]);
   const [pwd, setPwd] = useState({ current: "", next: "" });
 
+  // ── SHIPROCKET (DELIVERY PARTNER) STATE ─────────────
+  const [shiprocket, setShiprocket] = useState({
+    email: "", password: "", pickupPincode: "", pickupLocation: "",
+  });
+  const [shiprocketConfigured, setShiprocketConfigured] = useState(false);
+  const [shiprocketBusy, setShiprocketBusy] = useState(false);
+  const [shiprocketMsg, setShiprocketMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Load from localStorage on mount
   useEffect(() => {
     try {
@@ -328,10 +337,99 @@ export default function AdminDashboard() {
     document.documentElement.classList.toggle("admin-dark", darkMode);
   }, [darkMode]);
 
+  // Load the store's delivery-partner settings once we're signed in as admin.
+  useEffect(() => {
+    if (!session || session.role !== "admin") return
+    let active = true
+    void (async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        if (!token || !active) return
+        const res = await fetch("/api/admin/settings", { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        if (!active) return
+        if (!data.ok) {
+          setShiprocketMsg({ ok: false, text: data.error || "Could not load settings." })
+          return
+        }
+        const sr = data.settings?.shiprocket
+        setShiprocketConfigured(Boolean(sr))
+        if (sr) {
+          setShiprocket(prev => ({
+            ...prev,
+            email: sr.email || "",
+            pickupPincode: sr.pickupPincode || "",
+            pickupLocation: sr.pickupLocation || "",
+          }))
+        }
+      } catch {
+        if (active) setShiprocketMsg({ ok: false, text: "Could not load settings — is the server up?" })
+      }
+    })()
+    return () => { active = false }
+  }, [session]);
+
   const saveGeneral = useCallback(() => {
     try { localStorage.setItem("shri:admin:general", JSON.stringify(general)); } catch {}
     toast({ title: "Settings saved", description: "General settings updated." });
   }, [general, toast]);
+
+  const saveShiprocket = useCallback(async () => {
+    if (!shiprocket.email.trim() || !shiprocket.pickupPincode.trim()) {
+      setShiprocketMsg({ ok: false, text: "Shiprocket email and pickup pincode are required." })
+      return
+    }
+    setShiprocketBusy(true)
+    setShiprocketMsg(null)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error("Please sign in again.")
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          shiprocket: {
+            email: shiprocket.email.trim(),
+            ...(shiprocket.password ? { password: shiprocket.password } : {}),
+            pickupPincode: shiprocket.pickupPincode.trim(),
+            pickupLocation: shiprocket.pickupLocation.trim(),
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || "Save failed.")
+      setShiprocketConfigured(Boolean(data.settings?.shiprocket))
+      setShiprocket(prev => ({ ...prev, password: "" }))
+      setShiprocketMsg({ ok: true, text: "Shiprocket settings saved. New orders will be shipped via Shiprocket." })
+    } catch (e) {
+      setShiprocketMsg({ ok: false, text: (e as Error).message })
+    } finally {
+      setShiprocketBusy(false)
+    }
+  }, [shiprocket]);
+
+  const disconnectShiprocket = useCallback(async () => {
+    if (!window.confirm("Disconnect Shiprocket? New orders will not be pushed for shipping.")) return
+    setShiprocketBusy(true)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error("Please sign in again.")
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clearShiprocket: true }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || "Disconnect failed.")
+      setShiprocketConfigured(false)
+      setShiprocket({ email: "", password: "", pickupPincode: "", pickupLocation: "" })
+      setShiprocketMsg({ ok: true, text: "Shiprocket disconnected." })
+    } catch (e) {
+      setShiprocketMsg({ ok: false, text: (e as Error).message })
+    } finally {
+      setShiprocketBusy(false)
+    }
+  }, []);
 
   const persistAppearance = useCallback((next: { themeColor?: typeof themeColor; darkMode?: boolean }) => {
     const merged = { themeColor: next.themeColor ?? themeColor, darkMode: next.darkMode ?? darkMode };
@@ -1169,6 +1267,79 @@ export default function AdminDashboard() {
           <Button size="sm" onClick={saveGeneral} className="text-xs gap-1 text-white" style={{ backgroundColor: colors.maroon }}>
             <Save className="w-3.5 h-3.5" /> Save Changes
           </Button>
+        </CardContent>
+      </Card>
+
+
+      {/* Delivery Partner — Shiprocket */}
+      <Card className="border shadow-md" style={{ borderColor: `${colors.templeGold}20` }}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between" style={{ color: colors.deep }}>
+            <span className="flex items-center gap-2">
+              <Truck className="w-5 h-5" style={{ color: colors.templeGold }} /> Delivery Partner — Shiprocket
+            </span>
+            {shiprocketConfigured ? (
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[10px]">Connected</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] text-gray-500">Not connected</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Enter your Shiprocket account credentials (from{" "}
+            <a href="https://app.shiprocket.in/settings/account-details/integration" target="_blank" rel="noopener noreferrer"
+              className="underline" style={{ color: colors.saffron }}>Settings → Integrations → API</a>
+            ). Every new order is then pushed to Shiprocket automatically and customers can track it.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Shiprocket Email</label>
+              <Input type="email" placeholder="you@example.com" value={shiprocket.email}
+                onChange={(e) => setShiprocket(s => ({ ...s, email: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Password {shiprocketConfigured && <span className="text-gray-400">(leave blank to keep current)</span>}
+              </label>
+              <Input type="password" placeholder={shiprocketConfigured ? "••••••••" : "Shiprocket password"}
+                value={shiprocket.password} autoComplete="new-password"
+                onChange={(e) => setShiprocket(s => ({ ...s, password: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Pickup Pincode</label>
+              <Input placeholder="600001" inputMode="numeric" value={shiprocket.pickupPincode}
+                onChange={(e) => setShiprocket(s => ({ ...s, pickupPincode: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Pickup Location Name</label>
+              <Input placeholder="Primary" value={shiprocket.pickupLocation}
+                onChange={(e) => setShiprocket(s => ({ ...s, pickupLocation: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+          </div>
+
+          {shiprocketMsg && (
+            <p className={`text-xs ${shiprocketMsg.ok ? "text-emerald-600" : "text-red-500"}`}>
+              {shiprocketMsg.text}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={shiprocketBusy} onClick={() => void saveShiprocket()}
+              className="text-xs gap-1 text-white" style={{ backgroundColor: colors.maroon }}>
+              <Save className="w-3.5 h-3.5" /> {shiprocketBusy ? "Saving…" : "Save & Connect"}
+            </Button>
+            {shiprocketConfigured && (
+              <Button size="sm" variant="outline" disabled={shiprocketBusy} onClick={() => void disconnectShiprocket()}
+                className="text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50">
+                Disconnect
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

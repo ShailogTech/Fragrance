@@ -3,7 +3,7 @@
 // is an instant, offline-friendly cache. The admin panel writes the catalog;
 // the storefront (home + /collection) reads it.
 
-import { auth } from './firebase'
+import { authHeaders } from './client-auth'
 import { ADMIN_PRODUCTS_KEY, adminProductsSeed, type AdminProduct } from './catalog-data'
 
 export { ADMIN_PRODUCTS_KEY, adminProductsSeed, type AdminProduct }
@@ -43,15 +43,14 @@ export async function fetchCatalog(): Promise<AdminProduct[]> {
   }
 }
 
-// Push the catalog to the server in the background (admin email is sent so the
-// route can authorize the write).
+// Push the catalog to the server in the background. The write is authorized
+// by the signed-in admin's Firebase ID token (verified server-side).
 async function pushCatalogToCloud(list: AdminProduct[]): Promise<void> {
   try {
-    const email = auth.currentUser?.email?.toLowerCase() || ''
     await fetch('/api/products', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ products: list, email }),
+      headers: await authHeaders(),
+      body: JSON.stringify({ products: list }),
     })
   } catch {
     /* offline — cache still holds it */

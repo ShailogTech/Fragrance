@@ -107,7 +107,7 @@ const testimonials = [
 ]
 
 const trustBadges = [
-  { icon: Truck, title: 'Free Delivery', desc: 'On orders above ₹499' },
+  { icon: Truck, title: 'Free Delivery', desc: 'On orders above ₹500' },
   { icon: Shield, title: '100% Natural', desc: 'No chemicals or additives' },
   { icon: Award, title: 'Temple Trusted', desc: 'Used in 500+ temples' },
   { icon: Sparkles, title: 'Handcrafted', desc: 'Traditional methods' }
@@ -510,7 +510,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-1">
               <Flame className="w-3 h-3 animate-diya" />
-              <span>Free Delivery on Orders Above ₹499</span>
+              <span>Free Delivery on Orders Above ₹500</span>
             </div>
           </div>
 
@@ -752,8 +752,8 @@ export default function Home() {
           <div className="h-3 bg-gradient-to-r from-temple-gold/0 via-temple-gold/80 to-temple-gold/0" />
           <div className="deep-maroon-gradient py-3 overflow-hidden">
             <div className="flex animate-marquee whitespace-nowrap">
-              {['Free Delivery on Orders Above ₹499', '100% Natural Ingredients', 'Trusted by 500+ Temples', 'Handcrafted with Devotion', '75+ Years of Sacred Tradition', 'Festive Season Sale - Up to 40% Off',
-                'Free Delivery on Orders Above ₹499', '100% Natural Ingredients', 'Trusted by 500+ Temples', 'Handcrafted with Devotion', '75+ Years of Sacred Tradition', 'Festive Season Sale - Up to 40% Off'
+              {['Free Delivery on Orders Above ₹500', '100% Natural Ingredients', 'Trusted by 500+ Temples', 'Handcrafted with Devotion', '75+ Years of Sacred Tradition', 'Festive Season Sale - Up to 40% Off',
+                'Free Delivery on Orders Above ₹500', '100% Natural Ingredients', 'Trusted by 500+ Temples', 'Handcrafted with Devotion', '75+ Years of Sacred Tradition', 'Festive Season Sale - Up to 40% Off'
               ].map((msg, i) => (
                 <span key={i} className="text-temple-amber/90 text-xs font-medium mx-8 flex items-center gap-3">
                   <DiyaFlame size={12} />

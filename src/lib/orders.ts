@@ -8,6 +8,7 @@
 
 import type { CartLine } from './cart'
 import { auth } from './firebase'
+import { authHeaders } from './client-auth'
 
 export const ORDERS_KEY = 'shri:orders'
 
@@ -32,6 +33,14 @@ export interface StoredOrder {
   items: CartLine[]
   total: number
   status: string
+  payment?: string // 'cod' | 'upi' | 'card'
+  shipping?: {
+    provider?: string
+    shiprocketOrderId?: string
+    awbCode?: string
+    courierName?: string
+    status?: string
+  }
   customer?: CustomerDetails
   shipment?: ShipmentDetails
   // Backend metadata.
@@ -71,7 +80,7 @@ async function persistToCloud(order: StoredOrder): Promise<void> {
   try {
     await fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authHeaders(),
       body: JSON.stringify(order),
     })
   } catch {
@@ -83,7 +92,7 @@ async function updateCloudStatus(id: string, status: string): Promise<void> {
   try {
     await fetch(`/api/orders/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authHeaders(),
       body: JSON.stringify({ status }),
     })
   } catch {
@@ -99,7 +108,7 @@ export async function fetchMyOrders(): Promise<StoredOrder[]> {
   const user = auth.currentUser
   if (!user) return sortByNewest(loadOrders())
   try {
-    const res = await fetch(`/api/orders?uid=${encodeURIComponent(user.uid)}`)
+    const res = await fetch('/api/orders', { headers: await authHeaders() })
     const data = await res.json()
     if (!data.ok) return sortByNewest(loadOrders())
     const ordered = sortByNewest(data.orders as StoredOrder[])
@@ -114,9 +123,8 @@ export async function fetchMyOrders(): Promise<StoredOrder[]> {
  * Fetch every order (admin view). Does not touch the per-user cache.
  */
 export async function fetchAllOrders(): Promise<StoredOrder[]> {
-  const email = auth.currentUser?.email?.toLowerCase() || ''
   try {
-    const res = await fetch(`/api/orders?all=1&email=${encodeURIComponent(email)}`)
+    const res = await fetch('/api/orders?all=1', { headers: await authHeaders() })
     const data = await res.json()
     if (!data.ok) return sortByNewest(loadOrders())
     return sortByNewest(data.orders as StoredOrder[])
@@ -152,7 +160,7 @@ export function setOrderStatus(id: string, status: string): StoredOrder[] {
 export function addOrder(
   items: CartLine[],
   total: number,
-  details?: { customer?: CustomerDetails; shipment?: ShipmentDetails },
+  details?: { customer?: CustomerDetails; shipment?: ShipmentDetails; payment?: string },
 ): StoredOrder {
   const user = auth.currentUser
   const order: StoredOrder = {
@@ -165,6 +173,7 @@ export function addOrder(
     items,
     total,
     status: 'Processing',
+    payment: details?.payment,
     customer: details?.customer,
     shipment: details?.shipment,
     uid: user?.uid,

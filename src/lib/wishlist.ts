@@ -6,6 +6,7 @@
 // to the server the first time they sign in.
 
 import { auth } from './firebase'
+import { authHeaders } from './client-auth'
 
 export const WISHLIST_KEY = 'shri:wishlist'
 
@@ -47,8 +48,8 @@ async function persistToCloud(items: WishEntry[]): Promise<void> {
     if (!user) return
     await fetch('/api/wishlist', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: user.uid, items }),
+      headers: await authHeaders(),
+      body: JSON.stringify({ items }),
     })
   } catch {
     /* offline — cache still holds it */
@@ -64,7 +65,7 @@ export async function fetchWishlist(): Promise<WishEntry[]> {
   const user = auth.currentUser
   if (!user) return loadWishlist()
   try {
-    const res = await fetch(`/api/wishlist?uid=${encodeURIComponent(user.uid)}`)
+    const res = await fetch('/api/wishlist', { headers: await authHeaders() })
     const data = await res.json()
     if (!data.ok) return loadWishlist()
     const items = (data.items ?? []) as WishEntry[]

@@ -24,6 +24,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { addToStoredCart, CART_KEY, type CartLine } from '@/lib/cart'
 import { fetchMyOrders, ORDERS_KEY, cancelStoredOrder } from '@/lib/orders'
+import { authHeaders } from '@/lib/client-auth'
 import { fetchWishlist, removeFromWishlist } from '@/lib/wishlist'
 import { XCircle } from 'lucide-react'
 
@@ -38,6 +39,13 @@ interface OrderItem {
 
 interface OrderCustomer { name: string; email: string; phone: string }
 interface OrderShipment { address: string; city: string; state: string; pincode: string; notes?: string; method?: string }
+interface OrderShipping {
+  provider?: string
+  shiprocketOrderId?: string
+  awbCode?: string
+  courierName?: string
+  status?: string
+}
 
 interface Order {
   id: string
@@ -45,6 +53,8 @@ interface Order {
   status: 'Delivered' | 'Processing' | 'Shipped' | 'Cancelled'
   items: OrderItem[]
   total: number
+  payment?: string
+  shipping?: OrderShipping
   customer?: OrderCustomer
   shipment?: OrderShipment
 }
@@ -239,6 +249,36 @@ export default function UserDashboard() {
   // Tab state
   const [activeTab, setActiveTab] = useState('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
+  const [trackingDialog, setTrackingDialog] = useState<{
+    orderId: string
+    loading: boolean
+    error?: string
+    currentStatus?: string
+    courier?: string
+    awb?: string
+    activities?: Array<{ date: string; time?: string; location?: string; status: string; remark?: string }>
+  } | null>(null)
+
+  const openTracking = useCallback(async (orderId: string) => {
+    setTrackingDialog({ orderId, loading: true })
+    try {
+      const res = await fetch(`/api/shiprocket/track/${encodeURIComponent(orderId)}`, {
+        headers: await authHeaders(),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Tracking unavailable.')
+      setTrackingDialog({
+        orderId,
+        loading: false,
+        currentStatus: data.tracking?.currentStatus,
+        courier: data.tracking?.courier,
+        awb: data.tracking?.awb,
+        activities: data.tracking?.activities ?? [],
+      })
+    } catch (e) {
+      setTrackingDialog({ orderId, loading: false, error: (e as Error).message })
+    }
+  }, [])
 
   // Wishlist state — loaded from the backend (Firestore, cached locally) and
   // re-fetched when the auth session changes so it syncs across devices.
@@ -604,6 +644,20 @@ export default function UserDashboard() {
                   ))}
                 </div>
                 <OrderTrackingSteps status={order.status} />
+                {order.shipping?.provider === 'shiprocket' && (
+                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-temple-gold/8 border border-temple-gold/15">
+                    <Truck className="h-3.5 w-3.5 text-temple-saffron shrink-0" />
+                    <span className="text-[11px] text-temple-deep/70 truncate">
+                      Shiprocket{order.shipping.courierName ? ` · ${order.shipping.courierName}` : ''}
+                      {order.shipping.awbCode ? ` · AWB ${order.shipping.awbCode}` : ''}
+                    </span>
+                    <Button size="sm" variant="outline"
+                      onClick={() => void openTracking(order.id)}
+                      className="ml-auto h-7 px-3 text-[11px] border-temple-gold/30 text-temple-deep hover:bg-temple-gold/10">
+                      Track
+                    </Button>
+                  </div>
+                )}
                 <div className="flex justify-end mt-4 gap-2">
                   {order.status === 'Processing' && (
                     <Button
@@ -1144,6 +1198,52 @@ export default function UserDashboard() {
       {/* ====== DIALOGS ====== */}
 
       {/* Edit Profile Dialog */}
+      <Dialog open={trackingDialog !== null} onOpenChange={(open) => { if (!open) setTrackingDialog(null) }}>
+        <DialogContent className="bg-white border-temple-gold/30 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-temple-deep">
+              <Truck className="h-4 w-4 text-temple-saffron" /> Shipment Tracking
+            </DialogTitle>
+            <DialogDescription>
+              Order #{trackingDialog?.orderId}
+              {trackingDialog?.courier ? ` · ${trackingDialog.courier}` : ''}
+              {trackingDialog?.awb ? ` · AWB ${trackingDialog.awb}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {trackingDialog?.loading ? (
+            <div className="py-8 flex justify-center">
+              <div className="w-8 h-8 rounded-full border-4 border-temple-saffron border-t-transparent animate-spin" />
+            </div>
+          ) : trackingDialog?.error ? (
+            <p className="text-sm text-red-600 py-4">{trackingDialog.error}</p>
+          ) : (
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+              <div className="px-3 py-2 rounded-lg saffron-gradient text-white text-sm font-semibold">
+                Current status: {trackingDialog?.currentStatus || '—'}
+              </div>
+              {(trackingDialog?.activities ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">
+                  No tracking activity yet — the shipment is being picked up.
+                </p>
+              ) : (
+                <ol className="relative border-l-2 border-temple-gold/20 ml-2 space-y-4">
+                  {(trackingDialog?.activities ?? []).map((a, i) => (
+                    <li key={i} className="ml-4">
+                      <span className="absolute -left-[7px] w-3 h-3 rounded-full bg-temple-saffron border-2 border-white" />
+                      <p className="text-sm font-medium text-temple-deep">{a.status}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {[a.date, a.time].filter(Boolean).join(' ')}{a.location ? ` · ${a.location}` : ''}
+                      </p>
+                      {a.remark && <p className="text-[11px] text-muted-foreground italic">{a.remark}</p>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
         <DialogContent className="bg-white border-temple-gold/30">
           <DialogHeader>

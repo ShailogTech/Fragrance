@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
 import { loadCart, saveCart, fetchCart, type CartLine } from '@/lib/cart'
 import { addOrder } from '@/lib/orders'
+import { MIN_ORDER_VALUE, FREE_SHIPPING_THRESHOLD } from '@/lib/constants'
 import { getSession, subscribeAuth, type Session } from '@/lib/auth'
 
 type Step = 'address' | 'payment' | 'review' | 'confirmation'
@@ -73,17 +74,22 @@ export default function CheckoutPage() {
   }, [session])
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items])
+  const belowMinimum = subtotal < MIN_ORDER_VALUE
   const shippingFee = items.length === 0
     ? 0
     : form.method === 'express'
     ? 99
-    : subtotal >= 499
+    : subtotal >= FREE_SHIPPING_THRESHOLD
     ? 0
     : 49
   const total = subtotal + shippingFee
   const totalCount = items.reduce((s, i) => s + i.quantity, 0)
 
   const goNext = useCallback(() => {
+    if (belowMinimum) {
+      toast({ title: `Minimum order is ₹${MIN_ORDER_VALUE}`, description: `Add ₹${MIN_ORDER_VALUE - subtotal} more to your cart to place an order.` })
+      return
+    }
     if (step === 'address') {
       const f = form
       if (!f.name.trim() || !f.email.trim() || !f.phone.trim()) {
@@ -106,22 +112,22 @@ export default function CheckoutPage() {
       }
       setStep('review')
     }
-  }, [step, form, toast])
+  }, [step, form, toast, belowMinimum, subtotal])
 
   const placeOrder = useCallback(() => {
-    if (items.length === 0) return
+    if (items.length === 0 || belowMinimum) return
     const customer = { name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() }
     const shipment = {
       address: form.address.trim(), city: form.city.trim(), state: form.state.trim(),
       pincode: form.pincode.trim(), notes: form.notes.trim() || undefined, method: form.method,
     }
-    const order = addOrder(items, total, { customer, shipment })
+    const order = addOrder(items, total, { customer, shipment, payment: form.payment })
     setOrderId(order.id)
     setStep('confirmation')
     setItems([])
     saveCart([])
     toast({ title: 'Order placed', description: `Order ${order.id} confirmed!` })
-  }, [items, form, total, toast])
+  }, [items, form, total, toast, belowMinimum])
 
   if (!hydrated) {
     return (
@@ -210,8 +216,8 @@ export default function CheckoutPage() {
                     Continue <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 ) : (
-                  <Button onClick={placeOrder}
-                    className="sm:ml-auto h-11 saffron-gradient text-white hover:brightness-110 font-bold px-8 shadow-lg shadow-temple-saffron/25">
+                  <Button onClick={placeOrder} disabled={belowMinimum}
+                    className="sm:ml-auto h-11 saffron-gradient text-white hover:brightness-110 font-bold px-8 shadow-lg shadow-temple-saffron/25 disabled:opacity-50 disabled:shadow-none">
                     <Check className="w-4 h-4 mr-2" /> Place Order — ₹{total}
                   </Button>
                 )}
@@ -257,6 +263,13 @@ export default function CheckoutPage() {
                   <span className="text-sm font-bold text-temple-deep">Total</span>
                   <span className="text-xl font-bold text-temple-deep">₹{total}</span>
                 </div>
+
+                {belowMinimum && (
+                  <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-relaxed">
+                    <span className="font-bold">Minimum order ₹{MIN_ORDER_VALUE}.</span>{' '}
+                    Add ₹{MIN_ORDER_VALUE - subtotal} more to place your order.
+                  </div>
+                )}
 
                 <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-temple-deep/45">
                   <Lock className="w-3 h-3" /> Encrypted & secure
@@ -353,7 +366,7 @@ function AddressStep({ form, setForm }: { form: any; setForm: any }) {
           <p className="text-xs font-semibold text-temple-deep/70 mb-2">Delivery Speed</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
-              { v: 'standard' as const, label: 'Standard', sub: '3–5 business days', fee: 'Free on ₹499+' },
+              { v: 'standard' as const, label: 'Standard', sub: '3–5 business days', fee: `Free on ₹${FREE_SHIPPING_THRESHOLD}+` },
               { v: 'express' as const, label: 'Express', sub: '1–2 business days', fee: '₹99' },
             ].map(opt => (
               <button key={opt.v} type="button" onClick={() => setForm((f: any) => ({ ...f, method: opt.v }))}

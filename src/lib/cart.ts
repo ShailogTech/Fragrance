@@ -5,6 +5,7 @@
 // (no React), but only used client-side.
 
 import { auth } from './firebase'
+import { authHeaders } from './client-auth'
 
 export const CART_KEY = 'shri:cart'
 
@@ -38,8 +39,8 @@ async function pushCartToCloud(items: CartLine[]): Promise<void> {
     if (!user) return
     await fetch('/api/cart', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: user.uid, items }),
+      headers: await authHeaders(),
+      body: JSON.stringify({ items }),
     })
   } catch {
     /* offline — cache still holds it */
@@ -64,7 +65,7 @@ export async function fetchCart(): Promise<CartLine[]> {
   const user = auth.currentUser
   if (!user) return loadCart()
   try {
-    const res = await fetch(`/api/cart?uid=${encodeURIComponent(user.uid)}`)
+    const res = await fetch('/api/cart', { headers: await authHeaders() })
     const data = await res.json()
     if (!data.ok) return loadCart()
     const items = (data.items ?? []) as CartLine[]

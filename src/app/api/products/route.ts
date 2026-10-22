@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
 import { adminProductsSeed, type AdminProduct } from '@/lib/catalog-data'
+import { authErrorResponse, requireAdmin } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
-
-const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
 
 type ProductDoc = AdminProduct & { _id: number }
 
@@ -38,17 +37,19 @@ export async function GET() {
   }
 }
 
-// PUT /api/products  body = { products, email }  → replace the whole catalog
-// (admin only).
+// PUT /api/products  body = { products }  → replace the whole catalog
+// (admin only, verified Bearer token).
 export async function PUT(req: Request) {
+  try {
+    await requireAdmin(req)
+  } catch (e) {
+    return authErrorResponse(e)
+  }
   if (!isMongoConfigured) return notConfigured()
   try {
-    const { products, email } = await req.json()
-    if (!ADMIN_EMAILS.has((email || '').toLowerCase())) {
-      return NextResponse.json({ ok: false, error: 'Admin only.' }, { status: 403 })
-    }
-    if (!Array.isArray(products)) {
-      return NextResponse.json({ ok: false, error: 'products must be an array.' }, { status: 400 })
+    const { products } = await req.json()
+    if (!Array.isArray(products) || products.length > 500) {
+      return NextResponse.json({ ok: false, error: 'products must be an array (max 500).' }, { status: 400 })
     }
     const db = await getDb()
     const col = db.collection<ProductDoc>('products')

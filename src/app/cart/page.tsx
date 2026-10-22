@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
 import { loadCart, saveCart, addLine, fetchCart, type CartLine } from '@/lib/cart'
+import { MIN_ORDER_VALUE } from '@/lib/constants'
 
 export default function CartPage() {
   const router = useRouter()
@@ -74,7 +75,7 @@ export default function CartPage() {
     () => items.reduce((s, i) => s + i.price * i.quantity, 0),
     [items],
   )
-  const shipping = subtotal === 0 ? 0 : subtotal >= 499 ? 0 : 49
+  const shipping = subtotal === 0 ? 0 : subtotal >= 500 ? 0 : 49
   const promoDiscount = promoApplied ? Math.round(subtotal * 0.1) : 0
   const total = Math.max(0, subtotal + shipping - promoDiscount)
   const totalCount = items.reduce((s, i) => s + i.quantity, 0)
@@ -190,7 +191,7 @@ export default function CartPage() {
               {/* Reassurance row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
-                  { icon: Truck, title: 'Free Shipping', desc: 'On orders above ₹499' },
+                  { icon: Truck, title: 'Free Shipping', desc: 'On orders above ₹500' },
                   { icon: RotateCcw, title: '7-Day Returns', desc: 'Hassle-free returns' },
                   { icon: ShieldCheck, title: '100% Authentic', desc: 'Handcrafted in India' },
                 ].map((item, i) => (
@@ -263,14 +264,15 @@ export default function CartPage() {
                   <span className="text-2xl font-bold text-temple-deep">₹{total}</span>
                 </div>
 
-                <Button onClick={() => router.push('/checkout')}
-                  className="w-full bg-temple-deep text-temple-gold hover:bg-temple-maroon border border-temple-gold/30 font-bold h-12 text-sm shadow-lg shadow-temple-deep/20">
+                <Button onClick={() => router.push('/checkout')} disabled={subtotal < MIN_ORDER_VALUE}
+                  className="w-full bg-temple-deep text-temple-gold hover:bg-temple-maroon border border-temple-gold/30 font-bold h-12 text-sm shadow-lg shadow-temple-deep/20 disabled:opacity-50 disabled:shadow-none">
                   Proceed to Checkout <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
 
-                {subtotal < 499 && (
+                {subtotal < MIN_ORDER_VALUE && (
                   <p className="mt-3 text-[11px] text-center text-temple-saffron">
-                    Add ₹{499 - subtotal} more for <span className="font-bold">free shipping</span>
+                    Add ₹{MIN_ORDER_VALUE - subtotal} more to reach the{' '}
+                    <span className="font-bold">₹{MIN_ORDER_VALUE} minimum order</span> (free shipping included)
                   </p>
                 )}
 
