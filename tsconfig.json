@@ -38,6 +38,11 @@
   ],
   "exclude": [
     "node_modules",
-    "out"
+    "prisma",
+    "examples",
+    "skills",
+    "scripts",
+    "custom-server.py",
+    ".zscripts"
   ]
 }
