@@ -4,6 +4,9 @@ import { AuthError, authErrorResponse, requireUser, type VerifiedUser } from '@/
 import { getSettings } from '@/lib/settings'
 import { MIN_ORDER_VALUE } from '@/lib/constants'
 import { createShiprocketOrder, ShiprocketError, type ShippingOrderInput } from '@/lib/shiprocket'
+import {
+  sendOrderConfirmation, sendOwnerNewOrderAlert, type MailOrderView,
+} from '@/lib/mailer'
 
 export const dynamic = 'force-dynamic'
 
@@ -196,4 +199,27 @@ async function attachShipping(order: OrderDoc & { id: string }): Promise<void> {
     if (e instanceof ShiprocketError && (e.status === 503 || e.status === 0)) return // not configured
     console.warn(`[shiprocket] could not create shipment for ${order.id}:`, (e as Error).message)
   }
+}
+
+function toMailView(order: OrderDoc): MailOrderView {
+  return {
+    id: String(order.id),
+    total: Number(order.total) || 0,
+    items: (order.items ?? []).map((it) => ({
+      name: String(it?.name ?? 'Item'),
+      quantity: Number(it?.quantity) || 1,
+      price: Number(it?.price) || 0,
+    })),
+    customer: order.customer as MailOrderView['customer'],
+    shipment: order.shipment as MailOrderView['shipment'],
+    shipping: order.shipping as MailOrderView['shipping'],
+  }
+}
+
+async function notifyNewOrder(order: OrderDoc): Promise<void> {
+  const view = toMailView(order)
+  await Promise.allSettled([
+    sendOrderConfirmation(view),
+    sendOwnerNewOrderAlert(view),
+  ])
 }

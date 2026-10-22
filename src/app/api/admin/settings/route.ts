@@ -32,13 +32,29 @@ export async function GET(req: Request) {
 //   body: {
 //     shiprocket?: { email, password?, pickupPincode, pickupLocation? },
 //     clearShiprocket?: true,
-//     minOrderValue?: number
+//     email?: {
+//       smtpHost, smtpPort, smtpSecure, username, password?,
+//       fromAddress, ownerEmail, siteUrl,
+//     },
+//     clearEmail?: true,
+//     minOrderValue?: number,
 //   }
-// A blank/missing password keeps the stored one (write-only secret).
+// Blank/missing passwords keep the stored ones (write-only secrets).
 export async function PUT(req: Request) {
   let body: {
     shiprocket?: { email?: string; password?: string; pickupPincode?: string; pickupLocation?: string }
     clearShiprocket?: boolean
+    email?: {
+      smtpHost?: string
+      smtpPort?: number
+      smtpSecure?: boolean
+      username?: string
+      password?: string
+      fromAddress?: string
+      ownerEmail?: string
+      siteUrl?: string
+    }
+    clearEmail?: boolean
     minOrderValue?: number
   }
   try {
@@ -59,6 +75,11 @@ export async function PUT(req: Request) {
 
     if (body.clearShiprocket) {
       await saveSettings({ shiprocket: null })
+      return NextResponse.json({ ok: true, settings: publicSettings(await getSettings()) })
+    }
+
+    if (body.clearEmail) {
+      await saveSettings({ email: null })
       return NextResponse.json({ ok: true, settings: publicSettings(await getSettings()) })
     }
 
@@ -103,6 +124,43 @@ export async function PUT(req: Request) {
         ...(credentialsChanged || emailChanged
           ? { token: undefined, tokenFetchedAt: undefined }
           : { token: existing?.token, tokenFetchedAt: existing?.tokenFetchedAt }),
+      }
+    }
+
+    if (body.email) {
+      const inc = body.email
+      const smtpHost = (inc.smtpHost ?? current.email?.smtpHost ?? '').trim()
+      const username = (inc.username ?? current.email?.username ?? '').trim()
+      const fromAddress = (inc.fromAddress ?? current.email?.fromAddress ?? '').trim()
+      const ownerEmail = (inc.ownerEmail ?? current.email?.ownerEmail ?? 'admin@shrifragrance.com').trim()
+      const siteUrl = (inc.siteUrl ?? current.email?.siteUrl ?? 'http://localhost:3000').trim().replace(/\/+$/, '')
+      const smtpPort = Number(inc.smtpPort ?? current.email?.smtpPort ?? 587)
+      if (!smtpHost || !username || !fromAddress) {
+        return NextResponse.json(
+          { ok: false, error: 'SMTP host, username and from-address are required.' },
+          { status: 400 },
+        )
+      }
+      if (!/^\S+@\S+\.\S+$/.test(ownerEmail)) {
+        return NextResponse.json({ ok: false, error: 'Owner notification email is invalid.' }, { status: 400 })
+      }
+      if (!/^https?:\/\//.test(siteUrl)) {
+        return NextResponse.json({ ok: false, error: 'Site URL must start with http:// or https://' }, { status: 400 })
+      }
+      const password = inc.password?.trim()
+      if ((password === undefined || password === '') && !current.email?.password) {
+        return NextResponse.json({ ok: false, error: 'SMTP password is required on first setup.' }, { status: 400 })
+      }
+      const existing = current.email
+      patch.email = {
+        smtpHost,
+        smtpPort: Number.isFinite(smtpPort) && smtpPort > 0 ? Math.round(smtpPort) : 587,
+        smtpSecure: typeof inc.smtpSecure === 'boolean' ? inc.smtpSecure : (existing?.smtpSecure ?? smtpPort === 465),
+        username,
+        password: password && password !== '' ? password : existing!.password,
+        fromAddress,
+        ownerEmail,
+        siteUrl,
       }
     }
 

@@ -1,7 +1,7 @@
 // Store settings, persisted in MongoDB (single 'store' document).
 //
-// Secrets (Shiprocket password, cached API token) are stored here but are
-// write-only through the API — the settings route never returns them.
+// Secrets (Shiprocket password + token, SMTP password) are stored here but
+// are write-only through the API — the settings route never returns them.
 //
 // Server-only.
 
@@ -17,16 +17,29 @@ export interface ShiprocketSettings {
   tokenFetchedAt?: number // epoch ms
 }
 
+export interface EmailSettings {
+  smtpHost: string
+  smtpPort: number // 587 (STARTTLS) or 465 (implicit TLS)
+  smtpSecure: boolean
+  username: string
+  password: string // secret — never returned to clients
+  fromAddress: string // e.g. 'Shri Fragrance <orders@shrifragrance.com>'
+  ownerEmail: string // where new-order notifications go
+  siteUrl: string // absolute URL used in email links, no trailing slash
+}
+
 export interface StoreSettings {
   _id: 'store'
   minOrderValue: number
   shiprocket: ShiprocketSettings | null
+  email: EmailSettings | null
 }
 
 const DEFAULTS: StoreSettings = {
   _id: 'store',
   minOrderValue: MIN_ORDER_VALUE,
   shiprocket: null,
+  email: null,
 }
 
 export async function getSettings(): Promise<StoreSettings> {
@@ -55,6 +68,17 @@ export function publicSettings(s: StoreSettings) {
           pickupPincode: s.shiprocket.pickupPincode,
           pickupLocation: s.shiprocket.pickupLocation || 'Primary',
           tokenCached: Boolean(s.shiprocket.token),
+        }
+      : null,
+    email: s.email
+      ? {
+          smtpHost: s.email.smtpHost,
+          smtpPort: s.email.smtpPort,
+          smtpSecure: s.email.smtpSecure,
+          username: s.email.username,
+          fromAddress: s.email.fromAddress,
+          ownerEmail: s.email.ownerEmail,
+          siteUrl: s.email.siteUrl,
         }
       : null,
   }

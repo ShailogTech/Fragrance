@@ -315,6 +315,15 @@ export default function AdminDashboard() {
   const [shiprocketBusy, setShiprocketBusy] = useState(false);
   const [shiprocketMsg, setShiprocketMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // ── EMAIL / NOTIFICATIONS STATE ──────────────────────
+  const [emailCfg, setEmailCfg] = useState({
+    smtpHost: "", smtpPort: "587", smtpSecure: false, username: "", password: "",
+    fromAddress: "", ownerEmail: "", siteUrl: "",
+  });
+  const [emailConfigured, setEmailConfigured] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Load from localStorage on mount
   useEffect(() => {
     try {
@@ -354,6 +363,20 @@ export default function AdminDashboard() {
         }
         const sr = data.settings?.shiprocket
         setShiprocketConfigured(Boolean(sr))
+        const em = data.settings?.email
+        setEmailConfigured(Boolean(em))
+        if (em) {
+          setEmailCfg(prev => ({
+            ...prev,
+            smtpHost: em.smtpHost || "",
+            smtpPort: String(em.smtpPort || 587),
+            smtpSecure: Boolean(em.smtpSecure),
+            username: em.username || "",
+            fromAddress: em.fromAddress || "",
+            ownerEmail: em.ownerEmail || "",
+            siteUrl: em.siteUrl || "",
+          }))
+        }
         if (sr) {
           setShiprocket(prev => ({
             ...prev,
@@ -428,6 +451,67 @@ export default function AdminDashboard() {
       setShiprocketMsg({ ok: false, text: (e as Error).message })
     } finally {
       setShiprocketBusy(false)
+    }
+  }, []);
+
+  const saveEmail = useCallback(async () => {
+    if (!emailCfg.smtpHost.trim() || !emailCfg.username.trim() || !emailCfg.fromAddress.trim()) {
+      setEmailMsg({ ok: false, text: "SMTP host, username and from-address are required." })
+      return
+    }
+    setEmailBusy(true)
+    setEmailMsg(null)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error("Please sign in again.")
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          email: {
+            smtpHost: emailCfg.smtpHost.trim(),
+            smtpPort: Number(emailCfg.smtpPort) || 587,
+            smtpSecure: emailCfg.smtpSecure,
+            username: emailCfg.username.trim(),
+            ...(emailCfg.password ? { password: emailCfg.password } : {}),
+            fromAddress: emailCfg.fromAddress.trim(),
+            ownerEmail: emailCfg.ownerEmail.trim(),
+            siteUrl: emailCfg.siteUrl.trim(),
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || "Save failed.")
+      setEmailConfigured(true)
+      setEmailCfg(prev => ({ ...prev, password: "" }))
+      setEmailMsg({ ok: true, text: "Email settings saved — order notifications are active." })
+    } catch (e) {
+      setEmailMsg({ ok: false, text: (e as Error).message })
+    } finally {
+      setEmailBusy(false)
+    }
+  }, [emailCfg]);
+
+  const clearEmail = useCallback(async () => {
+    if (!window.confirm("Turn off email notifications?")) return
+    setEmailBusy(true)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error("Please sign in again.")
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clearEmail: true }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || "Failed.")
+      setEmailConfigured(false)
+      setEmailCfg({ smtpHost: "", smtpPort: "587", smtpSecure: false, username: "", password: "", fromAddress: "", ownerEmail: "", siteUrl: "" })
+      setEmailMsg({ ok: true, text: "Email notifications turned off." })
+    } catch (e) {
+      setEmailMsg({ ok: false, text: (e as Error).message })
+    } finally {
+      setEmailBusy(false)
     }
   }, []);
 
@@ -1337,6 +1421,110 @@ export default function AdminDashboard() {
               <Button size="sm" variant="outline" disabled={shiprocketBusy} onClick={() => void disconnectShiprocket()}
                 className="text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50">
                 Disconnect
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Email / Notifications */}
+      <Card className="border shadow-md" style={{ borderColor: `${colors.templeGold}20` }}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between" style={{ color: colors.deep }}>
+            <span className="flex items-center gap-2">
+              <Mail className="w-5 h-5" style={{ color: colors.templeGold }} /> Email &amp; Notifications
+            </span>
+            {emailConfigured ? (
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[10px]">Active</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] text-gray-500">Not configured</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Customers get an order confirmation and a shipping/tracking email; you get a new-order
+            alert. Uses your own SMTP account (Brevo, SendGrid, Gmail app-password, or your mail
+            server). Works with the Windows-server deployment.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">SMTP Host</label>
+              <Input placeholder="smtp-relay.brevo.com" value={emailCfg.smtpHost}
+                onChange={(e) => setEmailCfg(c => ({ ...c, smtpHost: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Port</label>
+                <Input placeholder="587" inputMode="numeric" value={emailCfg.smtpPort}
+                  onChange={(e) => setEmailCfg(c => ({ ...c, smtpPort: e.target.value.replace(/\D/g, "").slice(0, 5) }))}
+                  className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Security</label>
+                <button type="button"
+                  onClick={() => setEmailCfg(c => ({ ...c, smtpSecure: !c.smtpSecure }))}
+                  className="w-full h-9 px-3 rounded-md border text-xs font-medium flex items-center justify-between"
+                  style={{ borderColor: `${colors.templeGold}30` }}>
+                  <span>{emailCfg.smtpSecure ? "SSL/TLS (465)" : "STARTTLS (587)"}</span>
+                  <span className={`w-8 h-4 rounded-full relative transition-colors ${emailCfg.smtpSecure ? "bg-emerald-500" : "bg-gray-300"}`}>
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${emailCfg.smtpSecure ? "left-4" : "left-0.5"}`} />
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">SMTP Username</label>
+              <Input placeholder="user@example.com" value={emailCfg.username}
+                onChange={(e) => setEmailCfg(c => ({ ...c, username: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                SMTP Password {emailConfigured && <span className="text-gray-400">(blank keeps current)</span>}
+              </label>
+              <Input type="password" placeholder={emailConfigured ? "••••••••" : "SMTP password"}
+                value={emailCfg.password} autoComplete="new-password"
+                onChange={(e) => setEmailCfg(c => ({ ...c, password: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">From Address</label>
+              <Input placeholder="Shri Fragrance <orders@shrifragrance.com>" value={emailCfg.fromAddress}
+                onChange={(e) => setEmailCfg(c => ({ ...c, fromAddress: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Owner Notification Email</label>
+              <Input type="email" placeholder="admin@shrifragrance.com" value={emailCfg.ownerEmail}
+                onChange={(e) => setEmailCfg(c => ({ ...c, ownerEmail: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Site URL (used in email links)</label>
+              <Input placeholder="https://shrifragrance.com" value={emailCfg.siteUrl}
+                onChange={(e) => setEmailCfg(c => ({ ...c, siteUrl: e.target.value }))}
+                className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
+            </div>
+          </div>
+
+          {emailMsg && (
+            <p className={`text-xs ${emailMsg.ok ? "text-emerald-600" : "text-red-500"}`}>
+              {emailMsg.text}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={emailBusy} onClick={() => void saveEmail()}
+              className="text-xs gap-1 text-white" style={{ backgroundColor: colors.maroon }}>
+              <Save className="w-3.5 h-3.5" /> {emailBusy ? "Saving…" : "Save & Activate"}
+            </Button>
+            {emailConfigured && (
+              <Button size="sm" variant="outline" disabled={emailBusy} onClick={() => void clearEmail()}
+                className="text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50">
+                Turn Off
               </Button>
             )}
           </div>
