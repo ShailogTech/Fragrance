@@ -53,13 +53,22 @@ export async function isEmailConfigured(): Promise<boolean> {
 async function send(to: string, subject: string, html: string, text: string): Promise<void> {
   const t = await getTransport()
   if (!t) return // not configured — silently skip (checked by callers for logging)
+  // Header values must never contain line breaks or control characters
+  // (CRLF injection, CWE-93); recipients must look like email addresses.
+  const safeTo = sanitizeHeader(to)
+  const safeSubject = sanitizeHeader(subject)
+  if (!/^\S+@\S+\.\S+$/.test(safeTo)) return
   await t.transporter.sendMail({
-    from: t.cfg.fromAddress,
-    to,
-    subject,
+    from: sanitizeHeader(t.cfg.fromAddress),
+    to: safeTo,
+    subject: safeSubject,
     html,
     text,
   })
+}
+
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n\t\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500)
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────

@@ -25,4 +25,5 @@ export const adminProductsSeed: AdminProduct[] = [
   { id: 6, name: 'Rose', category: 'Floral', price: '₹259', stock: 220, status: 'Active', sales: 213, rating: 4.8 },
   { id: 7, name: 'Sandal', category: 'Premium', price: '₹399', stock: 140, status: 'Active', sales: 287, rating: 4.9 },
   { id: 8, name: 'Sacred Resin', category: 'Premium', price: '₹499', stock: 90, status: 'Active', sales: 156, rating: 4.9 },
+  { id: 999, name: 'Complete Pooja Collection', category: 'Premium', price: '₹1499', stock: 60, status: 'Active', sales: 88, rating: 4.9 },
 ]

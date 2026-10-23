@@ -100,3 +100,35 @@
 2. MongoDB not configured locally — DB-path behavior verified only up to the 503 boundary; the Mongo writes themselves were reviewed statically.
 3. Firebase project posture (is the admin email claimed? email-verification/enumeration settings) is not observable from the repo — F-2 must be verified in the Firebase console.
 4. Shiprocket API contract from vendor docs (apiv2 `/external`); live calls untested pending credentials.
+
+---
+
+# Addendum — Re-audit 2026-10-23 (pre-deployment)
+
+Re-run after the email/notification service (commit `6517c94`) and again after the
+pre-deployment hardening below.
+
+## New findings from the email service (found this pass)
+
+| ID | Severity | Finding | Status |
+| --- | --- | --- | --- |
+| F-11 | Medium | **nodemailer ≤10.0.9** carried 14 advisories (SMTP/CRLF injection, DKIM DoS, TLS validation, etc.) | **Fixed** — upgraded to 10.2.1 |
+| F-12 | Medium | **Email header injection (CWE-93)**: unvalidated `order.id`/`customer.email` flowed into `Subject`/`To`; signed-in users' ids were never format-checked, so CRLF could inject headers | **Fixed** — every header value passes `sanitizeHeader()` (strips CR/LF/control chars, caps length) and recipients must match an email regex; `order.id` now regex-validated for all callers |
+| F-13 | Low | Unused dependency chains (`next-auth` — which also pinned vulnerable nodemailer@7 via peer dep, `react-syntax-highlighter`→prismjs, `react-markdown`, `@mdxeditor/editor`, `prisma`/`@prisma/client` + `src/lib/db.ts`) | **Fixed** — all removed; `npm audit` dropped from **20 vulns (16 high)** to **10 (10 high)**; the remainder sit in the Next.js/Mongo/Firebase toolchain — keep patching via `npm audit fix` on schedule |
+
+## Previously open findings — now fixed for deployment
+
+- **F-1 (High, price tampering): FIXED.** `POST /api/orders` now recomputes every line item's price from the `products` collection and rebuilds the total server-side (items + shipping rule); unknown product ids are rejected; quantities clamped 1–99; the min-order check re-runs on the recomputed total. Client-supplied prices/totals are never stored. The home-page "Complete Pooja Collection" bundle (id 999) was added to the seed catalog so it prices correctly.
+- **F-3 (Medium, field injection): FIXED.** Only an explicit allowlist of fields (`id, items, total, status, payment, uid, userEmail, createdAt, customer{name,email,phone}, shipment{address,city,state,pincode,notes,method}`) reaches Mongo's `$set`; `uid`/`userEmail` come from the verified token, not the payload; strings length-capped.
+
+## Still open (accepted / owner action)
+
+- **F-2 (High, conditional)**: admin email `admin@shrifragrance.com` confirmed **claimed** in Firebase (signup returned EMAIL_EXISTS; reset email issued 2026-10-22). Owner must set a strong password from that mailbox and enable MFA.
+- **F-4 (Medium)**: no rate limiting — recommend adding per-IP throttling at the reverse proxy (IIS/Nginx) before public launch.
+- **F-5 (Medium)**: Shiprocket + SMTP passwords stored plaintext in the `settings` Mongo doc (write-only via API, admin-gated). Acceptable for launch with Atlas at-rest encryption; rotate if DB exposure is ever suspected.
+- **F-7 (Low)**: checkout still shows card/UPI fields with no gateway behind them — remove before accepting real card data, or integrate a PCI gateway.
+
+## Verification
+
+- `tsc --noEmit` clean; production build passes (API routes server-rendered).
+- Runtime smoke: ₹400 order → `400 Minimum order value is ₹500.`; malformed id → `400 Invalid order id.`; valid guest order → 503 (Mongo unset, expected pre-config); all protected APIs → 401 without token; pages 200.
