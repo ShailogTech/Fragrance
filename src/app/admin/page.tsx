@@ -29,7 +29,6 @@ import {
   UserPlus, Shield, Lock, BellRing, Globe, Palette,
 } from "lucide-react";
 import { adminProductsSeed as productsList, fetchCatalog, saveCatalog } from "@/lib/catalog";
-import { getIdToken } from "@/lib/client-auth";
 
 // ── Color Palette ──────────────────────────────────────
 const colors = {
@@ -352,9 +351,7 @@ export default function AdminDashboard() {
     let active = true
     void (async () => {
       try {
-        const token = await getIdToken()
-        if (!token || !active) return
-        const res = await fetch("/api/admin/settings", { headers: { Authorization: `Bearer ${token}` } })
+        const res = await fetch("/api/admin/settings")
         const data = await res.json()
         if (!active) return
         if (!data.ok) {
@@ -405,11 +402,9 @@ export default function AdminDashboard() {
     setShiprocketBusy(true)
     setShiprocketMsg(null)
     try {
-      const token = await getIdToken()
-      if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shiprocket: {
             email: shiprocket.email.trim(),
@@ -435,11 +430,9 @@ export default function AdminDashboard() {
     if (!window.confirm("Disconnect Shiprocket? New orders will not be pushed for shipping.")) return
     setShiprocketBusy(true)
     try {
-      const token = await getIdToken()
-      if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clearShiprocket: true }),
       })
       const data = await res.json()
@@ -462,11 +455,9 @@ export default function AdminDashboard() {
     setEmailBusy(true)
     setEmailMsg(null)
     try {
-      const token = await getIdToken()
-      if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: {
             smtpHost: emailCfg.smtpHost.trim(),
@@ -492,15 +483,33 @@ export default function AdminDashboard() {
     }
   }, [emailCfg]);
 
-  const clearEmail = useCallback(async () => {
-    if (!window.confirm("Turn off email notifications?")) return
+  const sendTestEmail = useCallback(async () => {
+    const to = window.prompt("Send a test email to:", emailCfg.ownerEmail || "");
+    if (!to || !to.trim()) return;
+    setEmailBusy(true);
+    setEmailMsg(null);
+    try {
+      const res = await fetch("/api/admin/settings/test-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: to.trim() }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Send failed.");
+      setEmailMsg({ ok: true, text: `Test email sent to ${to.trim()} — check the inbox.` });
+    } catch (e) {
+      setEmailMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setEmailBusy(false);
+    }
+  }, [emailCfg.ownerEmail]);
+
+  const clearEmail = useCallback(async () => {    if (!window.confirm("Turn off email notifications?")) return
     setEmailBusy(true)
     try {
-      const token = await getIdToken()
-      if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clearEmail: true }),
       })
       const data = await res.json()
@@ -1521,6 +1530,10 @@ export default function AdminDashboard() {
               className="text-xs gap-1 text-white" style={{ backgroundColor: colors.maroon }}>
               <Save className="w-3.5 h-3.5" /> {emailBusy ? "Saving…" : "Save & Activate"}
             </Button>
+            <Button size="sm" variant="outline" disabled={emailBusy} onClick={() => void sendTestEmail()}
+              className="text-xs gap-1" style={{ borderColor: `${colors.templeGold}50`, color: colors.deep }}>
+              <Mail className="w-3.5 h-3.5" /> Send Test Email
+            </Button>
             {emailConfigured && (
               <Button size="sm" variant="outline" disabled={emailBusy} onClick={() => void clearEmail()}
                 className="text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50">
@@ -1995,9 +2008,16 @@ export default function AdminDashboard() {
                     {["Processing","Shipped","Delivered","Cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <Button onClick={() => setOrderDetail(null)} variant="outline" className="text-xs h-8" style={{ borderColor: `${colors.templeGold}30` }}>
-                  Close
-                </Button>
+                <div className="flex items-center gap-2">
+                  <a href={`/invoice/${encodeURIComponent(orderDetail.id)}`} target="_blank" rel="noopener noreferrer"
+                    className="text-xs h-8 inline-flex items-center px-3 rounded-md border font-medium"
+                    style={{ borderColor: `${colors.templeGold}40`, color: colors.deep }}>
+                    Invoice
+                  </a>
+                  <Button onClick={() => setOrderDetail(null)} variant="outline" className="text-xs h-8" style={{ borderColor: `${colors.templeGold}30` }}>
+                    Close
+                  </Button>
+                </div>
               </div>
             </>
           )}

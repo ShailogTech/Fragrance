@@ -1,7 +1,12 @@
-// Client-side helper for calling the app's API routes with the own-auth
-// session token (verified server-side by src/lib/server-auth.ts).
+// Client-side helper for calling the app's API routes.
+//
+// Since the own-auth upgrade the credential is an httpOnly `shri_session`
+// cookie set by /api/auth/login|signup — fetch() sends it automatically for
+// same-origin requests, so authHeaders() only needs Content-Type. The legacy
+// localStorage token (sessions created before the cookie upgrade) is attached
+// as a Bearer header when present, until the user signs in again.
 
-import { TOKEN_KEY } from './auth'
+import { getSession, TOKEN_KEY } from './auth'
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
@@ -22,7 +27,7 @@ export async function authHeaders(): Promise<Record<string, string>> {
   const token = getToken()
   return token ? { ...base, Authorization: `Bearer ${token}` } : base
 }
-
 export function isSignedIn(): boolean {
-  return Boolean(getToken())
+  // Session-based: cookie sessions (the norm now) have no localStorage token.
+  return Boolean(getSession() || getToken())
 }

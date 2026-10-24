@@ -9,7 +9,7 @@
 // Server-only — never import from a client component.
 
 import { NextResponse } from 'next/server'
-import { verifyToken, ADMIN_EMAILS } from './auth-core'
+import { verifyToken, ADMIN_EMAILS, SESSION_COOKIE, SESSION_TTL_SECONDS } from './auth-core'
 
 export interface VerifiedUser {
   uid: string
@@ -23,12 +23,26 @@ function bearerToken(req: Request): string | null {
   return match ? match[1].trim() : null
 }
 
+function cookieToken(req: Request): string | null {
+  const header = req.headers.get('cookie')
+  if (!header) return null
+  for (const pair of header.split(';')) {
+    const idx = pair.indexOf('=')
+    if (idx === -1) continue
+    if (pair.slice(0, idx).trim() === SESSION_COOKIE) {
+      return decodeURIComponent(pair.slice(idx + 1).trim()) || null
+    }
+  }
+  return null
+}
+
 /**
- * Verify the request's session token. Returns null when the request carries
- * no token; throws a Response-producing Error for invalid tokens.
+ * Verify the request's session token (Authorization: Bearer header or the
+ * httpOnly session cookie). Returns null when the request carries no token;
+ * throws a Response-producing Error for invalid tokens.
  */
 export async function requireUser(req: Request): Promise<VerifiedUser | null> {
-  const token = bearerToken(req)
+  const token = bearerToken(req) ?? cookieToken(req)
   if (!token) return null
 
   const claims = verifyToken(token)
@@ -71,4 +85,27 @@ export function authErrorResponse(e: unknown): NextResponse {
     { ok: false, error: e instanceof Error ? e.message : 'Unauthorized.' },
     { status: 401 },
   )
+}
+
+/**
+ * Attach the httpOnly session cookie to a login/signup response. Secure is
+ * enabled when the request arrived over HTTPS (Cloudflare tunnel or TLS
+ * proxy) so localhost HTTP testing keeps working.
+ */
+export function withSessionCookie(res: NextResponse, req: Request, token: string): NextResponse {
+  const proto = (req.headers.get('x-forwarded-proto') || '').split(',')[0].trim()
+  res.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: proto === 'https',
+    path: '/',
+    maxAge: SESSION_TTL_SECONDS,
+  })
+  return res
+}
+
+/** Build a response that clears the session cookie (logout). */
+export function clearSessionCookie(res: NextResponse): NextResponse {
+  res.cookies.set(SESSION_COOKIE, '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 })
+  return res
 }

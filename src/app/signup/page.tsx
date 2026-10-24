@@ -91,7 +91,7 @@ export default function SignupPage() {
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-temple-deep/40" />
                     <Input type="password" autoComplete="new-password" required value={password}
-                      onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 chars"
+                      onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 chars, letters + numbers"
                       className="pl-9 h-11 border-temple-gold/25" />
                   </div>
                 </label>

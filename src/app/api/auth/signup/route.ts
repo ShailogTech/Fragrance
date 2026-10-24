@@ -1,8 +1,32 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
-import { hashPassword, roleForEmail, signToken, type UserDoc } from '@/lib/auth-core'
+import { hashPassword, passwordPolicyError, roleForEmail, signToken, type UserDoc } from '@/lib/auth-core'
+import { withSessionCookie } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
+
+// Small in-memory throttle (per email; resets after the window) so signup
+// can't be used to mass-create accounts or probe for existing ones.
+const MAX_SIGNUPS = 5
+const WINDOW_MS = 60 * 60 * 1000
+const attempts = new Map<string, { count: number; resetAt: number }>()
+
+function throttled(email: string): boolean {
+  const rec = attempts.get(email)
+  if (!rec) return false
+  if (Date.now() > rec.resetAt) {
+    attempts.delete(email)
+    return false
+  }
+  return rec.count >= MAX_SIGNUPS
+}
+
+function record(email: string): void {
+  const now = Date.now()
+  const rec = attempts.get(email)
+  if (!rec || now > rec.resetAt) attempts.set(email, { count: 1, resetAt: now + WINDOW_MS })
+  else rec.count += 1
+}
 
 // POST /api/auth/signup  body = { email, name, password, phone? }
 export async function POST(req: Request) {
@@ -27,11 +51,15 @@ export async function POST(req: Request) {
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       return NextResponse.json({ ok: false, error: 'Enter a valid email.' }, { status: 400 })
     }
-    if (password.length < 6) {
+    if (throttled(email)) {
       return NextResponse.json(
-        { ok: false, error: 'Password must be at least 6 characters.' },
-        { status: 400 },
+        { ok: false, error: 'Too many attempts. Try again later.' },
+        { status: 429 },
       )
+    }
+    const policyError = passwordPolicyError(password)
+    if (policyError) {
+      return NextResponse.json({ ok: false, error: policyError }, { status: 400 })
     }
 
     const db = await getDb()
@@ -54,7 +82,12 @@ export async function POST(req: Request) {
     })
 
     const token = signToken({ sub: String(inserted.insertedId), email, name, role })
-    return NextResponse.json({ ok: true, token, session: { email, name, role } })
+    record(email)
+    return withSessionCookie(
+      NextResponse.json({ ok: true, token, session: { email, name, role } }),
+      req,
+      token,
+    )
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
   }

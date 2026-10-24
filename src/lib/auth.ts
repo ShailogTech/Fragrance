@@ -30,6 +30,8 @@ const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
 
 export const USERS_KEY = 'shri:users'
 export const SESSION_KEY = 'shri:session'
+// Legacy (pre-cookie) token key — read-only fallback; new sessions never
+// write here. The httpOnly `shri_session` cookie is the real credential.
 export const TOKEN_KEY = 'shri:auth-token'
 
 let cachedSession: Session | null = null
@@ -51,11 +53,10 @@ function readToken(): string | null {
   }
 }
 
-function writeToken(token: string | null) {
+function clearToken() {
   if (typeof window === 'undefined') return
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(TOKEN_KEY)
   } catch { /* storage unavailable */ }
 }
 
@@ -130,7 +131,9 @@ export async function login(email: string, password: string): Promise<AuthResult
     if (!res.ok || !data.ok || !data.token || !data.session) {
       return { ok: false, error: data.error || 'Invalid credentials. If you have no account yet, sign up at /signup.' }
     }
-    writeToken(data.token)
+    // The httpOnly session cookie was set by the server; only the session
+    // (never the token) is kept client-side.
+    clearToken()
     cachedSession = data.session
     persistSession(data.session)
     mirrorUser(data.session)
@@ -152,7 +155,10 @@ export async function signup(input: {
   const name = input.name.trim()
   if (!email || !name || !input.password) return { ok: false, error: 'All fields are required.' }
   if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, error: 'Enter a valid email.' }
-  if (input.password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (input.password.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' }
+  if (!/[a-zA-Z]/.test(input.password) || !/[0-9]/.test(input.password)) {
+    return { ok: false, error: 'Password must contain both letters and numbers.' }
+  }
   try {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
@@ -163,7 +169,7 @@ export async function signup(input: {
     if (!res.ok || !data.ok || !data.token || !data.session) {
       return { ok: false, error: data.error || 'Could not create the account.' }
     }
-    writeToken(data.token)
+    clearToken()
     cachedSession = data.session
     persistSession(data.session)
     mirrorUser(data.session, input.phone)
@@ -177,8 +183,11 @@ export async function signup(input: {
 export async function logout(): Promise<void> {
   cachedSession = null
   persistSession(null)
-  writeToken(null)
+  clearToken()
   notify()
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } catch { /* best-effort — cookie also expires on its own */ }
 }
 
 export function subscribeAuth(listener: () => void): () => void {

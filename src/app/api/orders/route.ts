@@ -3,7 +3,7 @@ import { getDb, isMongoConfigured } from '@/lib/mongodb'
 import { adminProductsSeed } from '@/lib/catalog-data'
 import { AuthError, authErrorResponse, requireUser, type VerifiedUser } from '@/lib/server-auth'
 import { getSettings } from '@/lib/settings'
-import { MIN_ORDER_VALUE } from '@/lib/constants'
+import { MIN_ORDER_VALUE, SHIPPING_EXPRESS, SHIPPING_STANDARD } from '@/lib/constants'
 import { createShiprocketOrder, ShiprocketError, type ShippingOrderInput } from '@/lib/shiprocket'
 import {
   sendOrderConfirmation, sendOwnerNewOrderAlert, type MailOrderView,
@@ -48,6 +48,8 @@ function notConfigured() {
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/
 const ORDER_ID_RE = /^ORD-[A-Z0-9]{4,30}$/
+// Online payments only — COD is not offered.
+const PAYMENT_METHODS = new Set(['upi', 'card'])
 
 async function minOrderValue(): Promise<number> {
   if (!isMongoConfigured) return MIN_ORDER_VALUE
@@ -123,6 +125,15 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  if (order.payment === 'cod' || order.payment === 'COD') {
+    return NextResponse.json(
+      { ok: false, error: 'Cash on Delivery is not available. Please pay online via UPI or card.' },
+      { status: 400 },
+    )
+  }
+  if (typeof order.payment === 'string' && order.payment && !PAYMENT_METHODS.has(order.payment)) {
+    return NextResponse.json({ ok: false, error: 'Unsupported payment method.' }, { status: 400 })
+  }
 
   // Shape validation applies to every order (guest or signed-in).
   if (!Array.isArray(order.items) || order.items.length === 0 || order.items.length > 50) {
@@ -160,7 +171,9 @@ export async function POST(req: Request) {
       items: priced.items,
       total: priced.total,
       status: 'Processing',
-      payment: typeof order.payment === 'string' ? order.payment.slice(0, 10) : undefined,
+      payment: typeof order.payment === 'string' && PAYMENT_METHODS.has(order.payment)
+        ? order.payment
+        : undefined,
       // Identity comes from the verified token, never from the payload.
       uid: user?.uid,
       userEmail: user
@@ -249,7 +262,10 @@ async function priceOrder(
   }
 
   const minimum = await minOrderValue()
-  const shippingFee = pickShipment(order.shipment)?.method === 'express' ? 99 : 0
+  // Flat shipping fee for every order — there is no free-shipping tier.
+  const shippingFee = pickShipment(order.shipment)?.method === 'express'
+    ? SHIPPING_EXPRESS
+    : SHIPPING_STANDARD
   const total = subtotal + shippingFee
   if (total < minimum) {
     return { ok: false, error: `Minimum order value is ₹${minimum}.` }

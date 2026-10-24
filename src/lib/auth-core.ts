@@ -23,6 +23,18 @@ export const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
 
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
 
+/** Name of the httpOnly session cookie set by /api/auth/login and /signup. */
+export const SESSION_COOKIE = 'shri_session'
+
+/** Production password policy for new passwords (signup + change). */
+export function passwordPolicyError(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.'
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return 'Password must contain both letters and numbers.'
+  }
+  return null
+}
+
 export interface UserDoc {
   _id?: unknown
   email: string

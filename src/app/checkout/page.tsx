@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, User, Truck, Wallet, CheckCircle2, Mail, Phone, MapPin,
-  ShieldCheck, ChevronRight, CreditCard, IndianRupee, Smartphone, Banknote,
+  ShieldCheck, ChevronRight, CreditCard, IndianRupee, Smartphone,
   Flame, Lock, Check, Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
 import { loadCart, saveCart, fetchCart, type CartLine } from '@/lib/cart'
 import { addOrder } from '@/lib/orders'
-import { MIN_ORDER_VALUE, FREE_SHIPPING_THRESHOLD } from '@/lib/constants'
+import { MIN_ORDER_VALUE, SHIPPING_EXPRESS, SHIPPING_STANDARD } from '@/lib/constants'
 import { getSession, subscribeAuth, type Session } from '@/lib/auth'
 
 type Step = 'address' | 'payment' | 'review' | 'confirmation'
@@ -25,7 +25,7 @@ const STEPS: { key: Step; label: string; icon: React.ComponentType<{ className?:
   { key: 'review', label: 'Review', icon: CheckCircle2 },
 ]
 
-type PayMethod = 'cod' | 'upi' | 'card'
+type PayMethod = 'upi' | 'card'
 
 export default function CheckoutPage() {
   const router = useRouter()
@@ -51,7 +51,7 @@ export default function CheckoutPage() {
     name: '', email: '', phone: '',
     address: '', city: '', state: '', pincode: '', notes: '',
     method: 'standard' as 'standard' | 'express',
-    payment: 'cod' as PayMethod,
+    payment: 'upi' as PayMethod,
     upiId: '',
     cardName: '', cardNumber: '', cardExpiry: '', cardCvv: '',
   })
@@ -75,13 +75,12 @@ export default function CheckoutPage() {
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items])
   const belowMinimum = subtotal < MIN_ORDER_VALUE
+  // Flat shipping fee on every order — no free-delivery tier.
   const shippingFee = items.length === 0
     ? 0
     : form.method === 'express'
-    ? 99
-    : subtotal >= FREE_SHIPPING_THRESHOLD
-    ? 0
-    : 49
+    ? SHIPPING_EXPRESS
+    : SHIPPING_STANDARD
   const total = subtotal + shippingFee
   const totalCount = items.reduce((s, i) => s + i.quantity, 0)
 
@@ -253,7 +252,7 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between text-temple-deep/75">
                     <span>Shipping</span>
-                    <span>{shippingFee === 0 ? <span className="text-emerald-600 font-semibold">FREE</span> : `₹${shippingFee}`}</span>
+                    <span>₹{shippingFee}</span>
                   </div>
                 </div>
 
@@ -366,8 +365,8 @@ function AddressStep({ form, setForm }: { form: any; setForm: any }) {
           <p className="text-xs font-semibold text-temple-deep/70 mb-2">Delivery Speed</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
-              { v: 'standard' as const, label: 'Standard', sub: '3–5 business days', fee: `Free on ₹${FREE_SHIPPING_THRESHOLD}+` },
-              { v: 'express' as const, label: 'Express', sub: '1–2 business days', fee: '₹99' },
+              { v: 'standard' as const, label: 'Standard', sub: '3–5 business days', fee: `₹${SHIPPING_STANDARD}` },
+              { v: 'express' as const, label: 'Express', sub: '1–2 business days', fee: `₹${SHIPPING_EXPRESS}` },
             ].map(opt => (
               <button key={opt.v} type="button" onClick={() => setForm((f: any) => ({ ...f, method: opt.v }))}
                 className={`p-3.5 rounded-xl border text-left transition-all ${form.method === opt.v
@@ -387,7 +386,6 @@ function AddressStep({ form, setForm }: { form: any; setForm: any }) {
 
 function PaymentStep({ form, setForm, total }: { form: any; setForm: any; total: number }) {
   const methods: { v: PayMethod; label: string; icon: React.ComponentType<{ className?: string }>; desc: string }[] = [
-    { v: 'cod', label: 'Cash on Delivery', icon: Banknote, desc: 'Pay in cash when your order arrives' },
     { v: 'upi', label: 'UPI', icon: Smartphone, desc: 'PhonePe, Google Pay, Paytm and more' },
     { v: 'card', label: 'Credit / Debit Card', icon: CreditCard, desc: 'Visa, Mastercard, RuPay' },
   ]
@@ -478,7 +476,7 @@ function ReviewStep({ form, items, total, subtotal, shippingFee }: {
 
       <Section icon={Wallet} title="Payment">
         <p className="text-sm font-semibold text-temple-deep">
-          {form.payment === 'cod' && 'Cash on Delivery'}
+          {form.payment === 'upi' && 'UPI'}
           {form.payment === 'upi' && `UPI · ${form.upiId || '—'}`}
           {form.payment === 'card' && `Card ending ${form.cardNumber.slice(-4) || '••••'}`}
         </p>
@@ -502,7 +500,7 @@ function ReviewStep({ form, items, total, subtotal, shippingFee }: {
         <Separator className="bg-temple-gold/10 my-3" />
         <div className="space-y-1 text-xs">
           <div className="flex justify-between text-temple-deep/75"><span>Subtotal</span><span>₹{subtotal}</span></div>
-          <div className="flex justify-between text-temple-deep/75"><span>Shipping</span><span>{shippingFee === 0 ? 'FREE' : `₹${shippingFee}`}</span></div>
+          <div className="flex justify-between text-temple-deep/75"><span>Shipping</span><span>₹{shippingFee}</span></div>
           <div className="flex justify-between font-bold text-temple-deep text-sm pt-2 border-t border-temple-gold/15 mt-2">
             <span>Total</span><span>₹{total}</span>
           </div>
@@ -578,7 +576,7 @@ function ConfirmationView({
         <div className="mt-5 p-4 rounded-xl bg-temple-deep text-temple-gold flex items-center justify-between">
           <span className="text-sm font-semibold flex items-center gap-2">
             <IndianRupee className="w-4 h-4" />
-            {payment === 'cod' ? 'Cash on Delivery' : payment === 'upi' ? 'Paid via UPI' : 'Paid via Card'}
+            {payment === 'upi' ? 'Paid via UPI' : 'Paid via Card'}
           </span>
           <span className="text-xl font-bold">₹{total}</span>
         </div>

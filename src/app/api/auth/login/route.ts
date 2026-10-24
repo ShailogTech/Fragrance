@@ -6,6 +6,7 @@ import {
   verifyPassword,
   type UserDoc,
 } from '@/lib/auth-core'
+import { withSessionCookie } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,11 +69,11 @@ export async function POST(req: Request) {
     const name = user.name || email.split('@')[0]
     const role = roleForEmail(email)
     const token = signToken({ sub: String(user._id), email, name, role })
-    return NextResponse.json({
-      ok: true,
+    return withSessionCookie(
+      NextResponse.json({ ok: true, token, session: { email, name, role } }),
+      req,
       token,
-      session: { email, name, role },
-    })
+    )
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
   }

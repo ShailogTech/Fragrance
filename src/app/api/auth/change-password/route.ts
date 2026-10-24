@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/mongodb'
-import { hashPassword, verifyPassword, type UserDoc } from '@/lib/auth-core'
-import { authErrorResponse, requireUserStrict } from '@/lib/server-auth'
+import { hashPassword, passwordPolicyError, verifyPassword, type UserDoc } from '@/lib/auth-core'
+import { authErrorResponse, clearSessionCookie, requireUserStrict } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,11 +19,9 @@ export async function POST(req: Request) {
         { status: 400 },
       )
     }
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        { ok: false, error: 'Password must be at least 6 characters long.' },
-        { status: 400 },
-      )
+    const policyError = passwordPolicyError(newPassword)
+    if (policyError) {
+      return NextResponse.json({ ok: false, error: policyError }, { status: 400 })
     }
 
     const db = await getDb()
@@ -42,7 +40,8 @@ export async function POST(req: Request) {
       { _id: doc._id },
       { $set: { passwordHash: await hashPassword(newPassword) } },
     )
-    return NextResponse.json({ ok: true })
+    // Force a fresh sign-in everywhere after a password change.
+    return clearSessionCookie(NextResponse.json({ ok: true }))
   } catch (e) {
     return authErrorResponse(e)
   }

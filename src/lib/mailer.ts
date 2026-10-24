@@ -193,5 +193,20 @@ export async function sendShippingNotification(order: MailOrderView): Promise<vo
   }
 }
 
+/** Admin: verify the SMTP settings with a test message. Throws on failure. */
+export async function sendTestEmail(to: string): Promise<void> {
+  const t = await getTransport()
+  if (!t) throw new Error('Email settings are not configured. Save them first.')
+  const safeTo = sanitizeHeader(to)
+  if (!/^\S+@\S+\.\S+$/.test(safeTo)) throw new Error('Enter a valid recipient email.')
+  await t.transporter.sendMail({
+    from: sanitizeHeader(t.cfg.fromAddress),
+    to: safeTo,
+    subject: 'Shri Fragrance — SMTP test',
+    html: wrap('<p>SMTP settings are working. Order notifications will be delivered from now on.</p>'),
+    text: 'SMTP settings are working. Order notifications will be delivered from now on.',
+  })
+}
+
 // Keep nodemailer in the server bundle only.
 export type { Transporter }

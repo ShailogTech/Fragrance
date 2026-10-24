@@ -9,7 +9,7 @@ import {
   ArrowLeft, Package, CheckCircle2, Truck,
   ChevronDown, ChevronUp, Flame, Sparkles, Gift,
   Crown, Trash2, Plus, Edit3, IndianRupee,
-  Bell, Shield, Lock, Save, Eye, Wallet,
+  Bell, Shield, Lock, Save, Eye, Wallet, FileText,
   X, Phone, Mail, CalendarDays, Home, Store
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -504,8 +504,8 @@ export default function UserDashboard() {
       toast({ title: "Passwords Don't Match", description: 'New password and confirmation must match.', variant: 'destructive' })
       return
     }
-    if (newPass.length < 6) {
-      toast({ title: 'Weak Password', description: 'Password must be at least 6 characters long.', variant: 'destructive' })
+    if (newPass.length < 8 || !/[a-zA-Z]/.test(newPass) || !/[0-9]/.test(newPass)) {
+      toast({ title: 'Weak Password', description: 'Password must be at least 8 characters with letters and numbers.', variant: 'destructive' })
       return
     }
     try {
@@ -673,6 +673,10 @@ export default function UserDashboard() {
                   </div>
                 )}
                 <div className="flex justify-end mt-4 gap-2">
+                  <Link href={`/invoice/${encodeURIComponent(order.id)}`}
+                    className="inline-flex items-center justify-center gap-1 text-xs h-8 px-3 rounded-md border border-temple-gold/30 text-temple-deep hover:bg-temple-gold/10">
+                    <FileText className="h-3 w-3" />Invoice
+                  </Link>
                   {order.status === 'Processing' && (
                     <Button
                       size="sm"
