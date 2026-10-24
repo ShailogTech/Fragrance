@@ -7,8 +7,8 @@
 // is fired in the background.
 
 import type { CartLine } from './cart'
-import { auth } from './firebase'
-import { authHeaders } from './client-auth'
+import { getSession } from './auth'
+import { authHeaders, isSignedIn } from './client-auth'
 
 export const ORDERS_KEY = 'shri:orders'
 
@@ -105,8 +105,7 @@ async function updateCloudStatus(id: string, status: string): Promise<void> {
  * cache. Falls back to the cache if there is no user or the request fails.
  */
 export async function fetchMyOrders(): Promise<StoredOrder[]> {
-  const user = auth.currentUser
-  if (!user) return sortByNewest(loadOrders())
+  if (!isSignedIn()) return sortByNewest(loadOrders())
   try {
     const res = await fetch('/api/orders', { headers: await authHeaders() })
     const data = await res.json()
@@ -162,7 +161,7 @@ export function addOrder(
   total: number,
   details?: { customer?: CustomerDetails; shipment?: ShipmentDetails; payment?: string },
 ): StoredOrder {
-  const user = auth.currentUser
+  const session = getSession()
   const order: StoredOrder = {
     id: 'ORD-' + Date.now().toString(36).toUpperCase(),
     date: new Date().toLocaleDateString('en-US', {
@@ -176,8 +175,8 @@ export function addOrder(
     payment: details?.payment,
     customer: details?.customer,
     shipment: details?.shipment,
-    uid: user?.uid,
-    userEmail: user?.email?.toLowerCase() || details?.customer?.email?.toLowerCase(),
+    uid: session?.email,
+    userEmail: session?.email.toLowerCase() || details?.customer?.email?.toLowerCase(),
     createdAt: Date.now(),
   }
   saveOrders([order, ...loadOrders()])

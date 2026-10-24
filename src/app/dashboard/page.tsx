@@ -352,7 +352,7 @@ export default function UserDashboard() {
 
   // Real orders from the backend (Firestore, cached in localStorage), shown
   // above the mock history. Re-fetched whenever the auth session changes so a
-  // user's orders sync in once Firebase restores their session.
+  // user's orders sync in once the session is restored.
   const [storedOrders, setStoredOrders] = useState<Order[]>([])
   useEffect(() => {
     let active = true
@@ -492,7 +492,7 @@ export default function UserDashboard() {
     }, 800)
   }, [toast, profileForm])
 
-  const handlePasswordChange = () => {
+  const handlePasswordChange = async () => {
     const curPass = passwordForm.current
     const newPass = passwordForm.newPass
     const confirm = passwordForm.confirm
@@ -508,9 +508,23 @@ export default function UserDashboard() {
       toast({ title: 'Weak Password', description: 'Password must be at least 6 characters long.', variant: 'destructive' })
       return
     }
-    setPasswordDialogOpen(false)
-    setPasswordForm({ current: '', newPass: '', confirm: '' })
-    toast({ title: 'Password Changed!', description: 'Your password has been updated successfully.' })
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: await authHeaders(),
+        body: JSON.stringify({ currentPassword: curPass, newPassword: newPass }),
+      })
+      const data = (await res.json()) as { ok: boolean; error?: string }
+      if (!res.ok || !data.ok) {
+        toast({ title: 'Change Failed', description: data.error || 'Could not update the password.', variant: 'destructive' })
+        return
+      }
+      setPasswordDialogOpen(false)
+      setPasswordForm({ current: '', newPass: '', confirm: '' })
+      toast({ title: 'Password Changed!', description: 'Your password has been updated successfully.' })
+    } catch {
+      toast({ title: 'Network Error', description: 'Could not reach the server. Try again.', variant: 'destructive' })
+    }
   }
 
   const handleToggleNotif = useCallback((key: keyof NotificationSettings) => {

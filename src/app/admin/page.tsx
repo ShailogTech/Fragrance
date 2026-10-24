@@ -29,7 +29,7 @@ import {
   UserPlus, Shield, Lock, BellRing, Globe, Palette,
 } from "lucide-react";
 import { adminProductsSeed as productsList, fetchCatalog, saveCatalog } from "@/lib/catalog";
-import { auth } from "@/lib/firebase";
+import { getIdToken } from "@/lib/client-auth";
 
 // ── Color Palette ──────────────────────────────────────
 const colors = {
@@ -352,7 +352,7 @@ export default function AdminDashboard() {
     let active = true
     void (async () => {
       try {
-        const token = await auth.currentUser?.getIdToken()
+        const token = await getIdToken()
         if (!token || !active) return
         const res = await fetch("/api/admin/settings", { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
@@ -405,7 +405,7 @@ export default function AdminDashboard() {
     setShiprocketBusy(true)
     setShiprocketMsg(null)
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const token = await getIdToken()
       if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
@@ -435,7 +435,7 @@ export default function AdminDashboard() {
     if (!window.confirm("Disconnect Shiprocket? New orders will not be pushed for shipping.")) return
     setShiprocketBusy(true)
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const token = await getIdToken()
       if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
@@ -462,7 +462,7 @@ export default function AdminDashboard() {
     setEmailBusy(true)
     setEmailMsg(null)
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const token = await getIdToken()
       if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
@@ -496,7 +496,7 @@ export default function AdminDashboard() {
     if (!window.confirm("Turn off email notifications?")) return
     setEmailBusy(true)
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const token = await getIdToken()
       if (!token) throw new Error("Please sign in again.")
       const res = await fetch("/api/admin/settings", {
         method: "PUT",

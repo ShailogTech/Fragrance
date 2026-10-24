@@ -53,3 +53,7 @@ server.log
 # Skills directory
 /skills/
 .vercel
+
+# deploy watcher staging dirs
+/.next-new/
+/.next-old/

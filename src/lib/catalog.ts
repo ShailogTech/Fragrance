@@ -44,7 +44,7 @@ export async function fetchCatalog(): Promise<AdminProduct[]> {
 }
 
 // Push the catalog to the server in the background. The write is authorized
-// by the signed-in admin's Firebase ID token (verified server-side).
+// by the signed-in admin's session token (verified server-side).
 async function pushCatalogToCloud(list: AdminProduct[]): Promise<void> {
   try {
     await fetch('/api/products', {

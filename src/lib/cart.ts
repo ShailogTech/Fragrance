@@ -4,8 +4,7 @@
 // background, so every cart change syncs across devices. Framework-agnostic
 // (no React), but only used client-side.
 
-import { auth } from './firebase'
-import { authHeaders } from './client-auth'
+import { authHeaders, isSignedIn } from './client-auth'
 
 export const CART_KEY = 'shri:cart'
 
@@ -35,8 +34,7 @@ export function loadCart(): CartLine[] {
 // Push the cart to the server for the signed-in user (background, best-effort).
 async function pushCartToCloud(items: CartLine[]): Promise<void> {
   try {
-    const user = auth.currentUser
-    if (!user) return
+    if (!isSignedIn()) return
     await fetch('/api/cart', {
       method: 'PUT',
       headers: await authHeaders(),
@@ -62,8 +60,7 @@ export function saveCart(items: CartLine[]): void {
  * Falls back to the cache if there is no user or the request fails.
  */
 export async function fetchCart(): Promise<CartLine[]> {
-  const user = auth.currentUser
-  if (!user) return loadCart()
+  if (!isSignedIn()) return loadCart()
   try {
     const res = await fetch('/api/cart', { headers: await authHeaders() })
     const data = await res.json()

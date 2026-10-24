@@ -5,8 +5,7 @@
 // offline-friendly cache. Guests get a local-only wishlist that is migrated up
 // to the server the first time they sign in.
 
-import { auth } from './firebase'
-import { authHeaders } from './client-auth'
+import { authHeaders, isSignedIn } from './client-auth'
 
 export const WISHLIST_KEY = 'shri:wishlist'
 
@@ -44,8 +43,7 @@ export function saveWishlist(items: WishEntry[]): void {
 
 async function persistToCloud(items: WishEntry[]): Promise<void> {
   try {
-    const user = auth.currentUser
-    if (!user) return
+    if (!isSignedIn()) return
     await fetch('/api/wishlist', {
       method: 'PUT',
       headers: await authHeaders(),
@@ -62,8 +60,7 @@ async function persistToCloud(items: WishEntry[]): Promise<void> {
  * Falls back to the cache if there is no user or the request fails.
  */
 export async function fetchWishlist(): Promise<WishEntry[]> {
-  const user = auth.currentUser
-  if (!user) return loadWishlist()
+  if (!isSignedIn()) return loadWishlist()
   try {
     const res = await fetch('/api/wishlist', { headers: await authHeaders() })
     const data = await res.json()

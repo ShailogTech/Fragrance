@@ -1,20 +1,15 @@
 // Server-side authentication for API route handlers.
 //
-// The app authenticates users with Firebase Authentication in the browser.
-// Firebase ID tokens (1-hour JWTs, via `auth.currentUser.getIdToken()`) are
-// sent as `Authorization: Bearer <token>` and verified here against
-// Firebase's REST API, so routes never trust a client-supplied uid/email.
+// The app authenticates against its own /api/auth/* routes (local MongoDB +
+// scrypt + HS256 session tokens — see src/lib/auth-core.ts). Clients send the
+// token as `Authorization: Bearer <token>`; it is verified here with a local
+// HMAC check, so routes never trust a client-supplied uid/email and no
+// external auth service is contacted.
 //
 // Server-only — never import from a client component.
 
 import { NextResponse } from 'next/server'
-
-// The web API key is part of the public Firebase client config (see
-// src/lib/firebase.ts); it identifies the project, it is not a secret.
-// FIREBASE_API_KEY may override it for separate environments.
-const WEB_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyAD2QUIcv7v1Bsa8yRQTsauoFA9vq9dTWs'
-
-const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
+import { verifyToken, ADMIN_EMAILS } from './auth-core'
 
 export interface VerifiedUser {
   uid: string
@@ -29,34 +24,19 @@ function bearerToken(req: Request): string | null {
 }
 
 /**
- * Verify the request's Firebase ID token. Returns null when the request
- * carries no token; throws a Response-producing Error for invalid tokens.
+ * Verify the request's session token. Returns null when the request carries
+ * no token; throws a Response-producing Error for invalid tokens.
  */
 export async function requireUser(req: Request): Promise<VerifiedUser | null> {
   const token = bearerToken(req)
   if (!token) return null
 
-  const res = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${WEB_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken: token }),
-      cache: 'no-store',
-    },
-  )
-  if (!res.ok) {
+  const claims = verifyToken(token)
+  if (!claims) {
     throw new AuthError(401, 'Invalid or expired session. Please sign in again.')
   }
-  const data = (await res.json()) as {
-    users?: Array<{ localId: string; email?: string }>
-  }
-  const user = data.users?.[0]
-  if (!user?.localId) {
-    throw new AuthError(401, 'Invalid or expired session. Please sign in again.')
-  }
-  const email = (user.email || '').toLowerCase()
-  return { uid: user.localId, email, isAdmin: ADMIN_EMAILS.has(email) }
+  const email = claims.email.toLowerCase()
+  return { uid: claims.sub, email, isAdmin: ADMIN_EMAILS.has(email) || claims.role === 'admin' }
 }
 
 /** Like requireUser, but responds 401 when no token is present. */
