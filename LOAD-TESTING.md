@@ -1,21 +1,31 @@
 # Load Testing — Shri Fragrance (production build)
 
-- **Date:** 2026-11-25
-- **Build:** production (`next build` → `next start`), commit at the time of testing: pre-`v1.1.0` hardening tree
-- **Tool:** autocannon 7 (`npx autocannon`), 0 errors / 0 timeouts across every scenario
+- **Date:** 2026-11-25 (final numbers = v1.1.0 merged tree)
+- **Build:** production (`next build` → `next start`), v1.1.0 tree: local scrypt+JWT auth, security headers, deployment hardening
+- **Tool:** autocannon 7 (`npx autocannon`), **0 errors / 0 timeouts across every scenario and every run**
 - **Environment:** Windows 10 x64 dev machine, Node v22.16, single Node process, MongoDB **not** configured (all DB-backed API paths exercised only up to their 503/validation boundary)
-- Raw per-run data: [`security-audit-artifacts/loadtest/`](./loadtest/)
+- Raw per-run data: [`security-audit-artifacts/loadtest/`](./loadtest/) (`lt-*.json` = final v1.1.0 tree; `loadtest-*.json` = pre-merge Firebase-auth tree, kept for comparison)
 
-## Results
+## Results — v1.1.0 (official baseline)
 
 | Scenario | Concurrency | Duration | Throughput | p50 | p99 | Expected responses | Errors |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `GET /` (home) | 20 | 20 s | **171 rps** | 114 ms | 177 ms | 100% 200 | 0 |
-| `GET /collection` | 20 | 15 s | **371 rps** | 53 ms | 74 ms | 100% 200 | 0 |
-| `GET /api/health` | 20 | 15 s | **365 rps** | 40 ms | 258 ms | 100% 200 | 0 |
-| `GET /api/health` | 50 | 15 s | 287 rps | 125 ms | 960 ms | 100% 200 | 0 |
-| `GET /api/products` | 50 | 15 s | **350 rps** | 103 ms | 668 ms | 100% 503¹ | 0 |
-| `POST /api/orders` (min-order validation) | 20 | 15 s | **292 rps** | 59 ms | 253 ms | 100% 400² | 0 |
+| `GET /` (home) | 20 | 20 s | **187 rps** | 104 ms | 151 ms | 100% 200 | 0 |
+| `GET /collection` | 20 | 15 s | **763 rps** | 17 ms | 82 ms | 100% 200 | 0 |
+| `GET /api/products` | 50 | 15 s | **980 rps** | 47 ms | 155 ms | 100% 503¹ | 0 |
+| `POST /api/orders` (min-order validation) | 20 | 15 s | **909 rps** | 21 ms | 55 ms | 100% 400² | 0 |
+
+### Pre-merge comparison (Firebase-verification auth)
+
+| Scenario | Pre-merge | v1.1.0 | Δ |
+| --- | --- | --- | --- |
+| `GET /collection` | 371 rps / p99 74 ms | **763 rps / p99 82 ms** | ~2× |
+| `GET /api/products` | 350 rps / p99 668 ms | **980 rps / p99 155 ms** | ~2.8× |
+| `POST /api/orders` | 292 rps / p99 253 ms | **909 rps / p99 55 ms** | ~3.1× |
+
+The step change comes from the local HMAC session verification (no external
+auth roundtrip per request) plus the merged-tree code updates. The home page
+carries the heaviest markup and remains the slowest route (p99 151 ms).
 
 ¹ `503` is the **correct** business response while `MONGODB_URI` is unset — measures the full Next.js route + JSON overhead.
 ² `400` is the min-order guard rejecting a ₹400 order — measures JSON parsing + validation cost.

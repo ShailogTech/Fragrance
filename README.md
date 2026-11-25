@@ -37,9 +37,10 @@ Create `.env` in the project root:
 
 ```
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net
+# Required: session signing secret (generate: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
+AUTH_SECRET=<64+ hex chars>
 # optional overrides
 MONGODB_DB=shrifragrance
-FIREBASE_API_KEY=<public web key, already defaulted in code>
 PORT=3000
 ```
 
