@@ -20,6 +20,7 @@ const REPO = 'C:/Shri_ecommerce/Fragrance'
 const SLUG = 'ShailogTech/Fragrance'
 const BRANCH = 'main'
 const APP = 'shri-fragrance'
+const PM2 = `"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}"`
 const POLL_MS = 60_000
 const CI_RECHECK_MS = 10 * 60_000 // re-query a sha's CI at most this often
 const BUILD_ENV = { ...process.env, NEXT_DIST_DIR: '.next-new' }
@@ -116,6 +117,9 @@ async function healthy() {
 async function deploy(remoteSha) {
   deploying = true
   const localBefore = sh('git rev-parse HEAD')
+  // True while the live app is stopped for the build swap: a failure from
+  // that point on must always bring it back up.
+  let appStopped = false
   log(`deploying ${remoteSha.slice(0, 9)} (from ${localBefore.slice(0, 9)})`)
   try {
     // npm install rewrites package-lock.json whenever it drifts from
@@ -125,9 +129,11 @@ async function deploy(remoteSha) {
     timed('install', () => sh('npm install --no-audit --no-fund'))
     log('building...')
     timed('build', () => sh('npm run build', { env: BUILD_ENV }))
-    sh(`"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}" stop ${APP}`)
+    sh(`${PM2} stop ${APP}`)
+    appStopped = true
     swapBuildDirs()
-    sh(`"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}" restart ${APP}`)
+    sh(`${PM2} restart ${APP}`)
+    appStopped = false
     if (await healthy()) {
       log(`deploy OK — serving ${sh('git rev-parse HEAD').slice(0, 9)}`)
     } else {
@@ -135,18 +141,41 @@ async function deploy(remoteSha) {
     }
   } catch (e) {
     log(`DEPLOY FAILED: ${errDetail(e)}`)
-    log('rolling code back to the last deployed commit (running build is untouched)')
+    log('rolling code back to the last deployed commit')
     try {
       sh(`git reset --hard ${localBefore}`)
     } catch (e2) {
       log(`rollback failed too: ${errDetail(e2)}`)
     }
-    // make sure the app is running whatever we ended up on
-    try {
-      sh(`"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}" restart ${APP}`)
-    } catch { /* may already be running */ }
+    if (appStopped) {
+      restartApp()
+    } else {
+      // The live app was never touched, but its node_modules may have been by
+      // the failed attempt's npm install: resync them to the rolled-back
+      // commit, and restart only if that actually changed something.
+      try {
+        if (/up to date/i.test(sh('npm install --no-audit --no-fund'))) {
+          log('rollback complete — live app was never touched, not restarted')
+        } else {
+          log('rollback changed dependencies — restarting the app on the previous release')
+          restartApp()
+        }
+      } catch (e3) {
+        // Leave the running process alone: it serves fine on what it has
+        // already loaded, and the next tick retries the deploy.
+        log(`could not resync dependencies after rollback (app left running): ${errDetail(e3)}`)
+      }
+    }
   } finally {
     deploying = false
+  }
+}
+
+function restartApp() {
+  try {
+    sh(`${PM2} restart ${APP}`)
+  } catch (e) {
+    log(`could not restart ${APP} — it may be down: ${errDetail(e)}`)
   }
 }
 
