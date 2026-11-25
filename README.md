@@ -61,17 +61,23 @@ npm start          # next start -p 3000
 ```
 
 To keep it running as a service (auto-start on boot, restart on crash), use
-**PM2**:
+**PM2 in cluster mode** — it uses every CPU core and restarts on crash:
 
 ```powershell
 npm install -g pm2 pm2-windows-startup
-pm2 start npm --name shri-fragrance -- start
+pm2 start npm --name shri-fragrance -i max -- start
 pm2 save
 pm2-startup install
 ```
 
-Then put IIS/Nginx/Caddy in front as a reverse proxy to `:3000` for HTTPS.
-Recommended Node LTS (20+).
+Then put IIS/Nginx/Caddy in front as a reverse proxy to `:3000` for HTTPS
+(per-IP rate limiting at the proxy is recommended — see the security audit).
+Recommended Node LTS (20+, enforced by the `engines` field).
+
+**Health check:** `GET /api/health` → `{ ok, uptimeSec, mongo, timestamp }` —
+dependency-free liveness probe for uptime monitors and load balancers.
+**Load testing:** see [`LOAD-TESTING.md`](LOAD-TESTING.md) for the tested
+baseline (autocannon, zero errors) and how to reproduce it on the server.
 
 ## Key routes
 
