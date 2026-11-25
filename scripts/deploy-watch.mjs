@@ -29,6 +29,33 @@ const sh = (cmd, opts = {}) =>
 
 const log = (msg) => console.log(`[deploy-watch ${new Date().toISOString()}] ${msg}`)
 
+// execSync errors carry the failed command's stdout/stderr; the message alone
+// is only "Command failed: …", which says nothing about the cause.
+function errDetail(e) {
+  const head = (e?.message || String(e)).split('\n')[0]
+  const tail = (buf) =>
+    (Buffer.isBuffer(buf) ? buf.toString('utf8') : String(buf ?? ''))
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(-6)
+      .join(' | ')
+  const detail = [tail(e?.stdout), tail(e?.stderr)].filter(Boolean).join(' || ')
+  return detail ? `${head} — ${detail}`.slice(0, 1500) : head
+}
+
+function timed(step, fn) {
+  const started = Date.now()
+  const secs = () => ((Date.now() - started) / 1000).toFixed(0)
+  try {
+    fn()
+  } catch (e) {
+    log(`${step} FAILED after ${secs()}s: ${errDetail(e)}`)
+    throw e
+  }
+  log(`${step} done in ${secs()}s`)
+}
+
 let deploying = false
 const ciCache = new Map() // sha → { status, at }
 const skippedShas = new Set() // sha → CI failed, logged once
@@ -91,10 +118,13 @@ async function deploy(remoteSha) {
   const localBefore = sh('git rev-parse HEAD')
   log(`deploying ${remoteSha.slice(0, 9)} (from ${localBefore.slice(0, 9)})`)
   try {
-    sh(`git pull --ff-only origin ${BRANCH}`)
-    sh('npm install --no-audit --no-fund')
+    // npm install rewrites package-lock.json whenever it drifts from
+    // package.json; left dirty, that file makes the next pull abort.
+    sh('git checkout -- package-lock.json || true')
+    timed('pull', () => sh(`git pull --ff-only origin ${BRANCH}`))
+    timed('install', () => sh('npm install --no-audit --no-fund'))
     log('building...')
-    sh('npm run build', { env: BUILD_ENV })
+    timed('build', () => sh('npm run build', { env: BUILD_ENV }))
     sh(`"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}" stop ${APP}`)
     swapBuildDirs()
     sh(`"${path.join(process.env.APPDATA || '', 'npm', 'pm2.cmd')}" restart ${APP}`)
@@ -104,12 +134,12 @@ async function deploy(remoteSha) {
       log('WARNING: app did not report healthy within 30s after deploy — check pm2 logs')
     }
   } catch (e) {
-    log(`DEPLOY FAILED: ${e.message?.split('\n')[0]}`)
+    log(`DEPLOY FAILED: ${errDetail(e)}`)
     log('rolling code back to the last deployed commit (running build is untouched)')
     try {
       sh(`git reset --hard ${localBefore}`)
     } catch (e2) {
-      log(`rollback failed too: ${e2.message?.split('\n')[0]}`)
+      log(`rollback failed too: ${errDetail(e2)}`)
     }
     // make sure the app is running whatever we ended up on
     try {
@@ -123,12 +153,13 @@ async function deploy(remoteSha) {
 async function tick() {
   if (deploying) return
   let remote, local
+  const started = Date.now()
   try {
     sh(`git fetch origin ${BRANCH}`)
     remote = sh(`git rev-parse origin/${BRANCH}`)
     local = sh('git rev-parse HEAD')
   } catch (e) {
-    log(`git fetch failed: ${e.message?.split('\n')[0]}`)
+    log(`git fetch failed after ${((Date.now() - started) / 1000).toFixed(0)}s: ${errDetail(e)}`)
     return
   }
   if (remote === local) return
@@ -155,5 +186,5 @@ async function tick() {
 }
 
 log(`watching ${SLUG} ${BRANCH} → ${REPO} (poll ${POLL_MS / 1000}s)`)
-const loop = () => tick().catch(e => log(`tick error: ${e.message}`)).finally(() => setTimeout(loop, POLL_MS))
+const loop = () => tick().catch(e => log(`tick error: ${errDetail(e)}`)).finally(() => setTimeout(loop, POLL_MS))
 loop()
