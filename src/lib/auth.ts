@@ -25,9 +25,6 @@ export interface Session {
 
 export interface AuthResult { ok: boolean; error?: string; session?: Session }
 
-// Admin allowlist. Any account with these emails gets the 'admin' role.
-const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
-
 export const USERS_KEY = 'shri:users'
 export const SESSION_KEY = 'shri:session'
 // Legacy (pre-cookie) token key — read-only fallback; new sessions never
@@ -128,7 +125,7 @@ export async function login(email: string, password: string): Promise<AuthResult
       body: JSON.stringify({ email: e, password }),
     })
     const data = (await res.json()) as { ok: boolean; error?: string; token?: string; session?: Session }
-    if (!res.ok || !data.ok || !data.token || !data.session) {
+    if (!res.ok || !data.ok || !data.session) {
       return { ok: false, error: data.error || 'Invalid credentials. If you have no account yet, sign up at /signup.' }
     }
     // The httpOnly session cookie was set by the server; only the session
@@ -166,7 +163,7 @@ export async function signup(input: {
       body: JSON.stringify({ email, name, password: input.password, phone: input.phone }),
     })
     const data = (await res.json()) as { ok: boolean; error?: string; token?: string; session?: Session }
-    if (!res.ok || !data.ok || !data.token || !data.session) {
+    if (!res.ok || !data.ok || !data.session) {
       return { ok: false, error: data.error || 'Could not create the account.' }
     }
     clearToken()
@@ -200,11 +197,6 @@ export function subscribeAuth(listener: () => void): () => void {
     window.removeEventListener('shri:auth-change', handler)
     window.removeEventListener('storage', handler)
   }
-}
-
-// Used by modules that previously called Firebase's getIdToken().
-export function isAdminEmail(email: string): boolean {
-  return ADMIN_EMAILS.has(email.trim().toLowerCase())
 }
 
 export function hasToken(): boolean {

@@ -292,7 +292,7 @@ export default function AdminDashboard() {
   // ── SETTINGS STATE ──────────────────────────────────
   const [general, setGeneral] = useState({
     storeName: "Shri Fragrance",
-    storeEmail: "admin@shrifragrance.com",
+    storeEmail: "",
     currency: "INR (₹)",
     timezone: "Asia/Kolkata (IST)",
   });
@@ -1507,7 +1507,7 @@ export default function AdminDashboard() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Owner Notification Email</label>
-              <Input type="email" placeholder="admin@shrifragrance.com" value={emailCfg.ownerEmail}
+              <Input type="email" placeholder="you@example.com" value={emailCfg.ownerEmail}
                 onChange={(e) => setEmailCfg(c => ({ ...c, ownerEmail: e.target.value }))}
                 className="h-9 text-sm" style={{ borderColor: `${colors.templeGold}30` }} />
             </div>
@@ -1772,7 +1772,7 @@ export default function AdminDashboard() {
             <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold gold-glow" style={{ backgroundColor: colors.templeGold, color: colors.deep }}>SA</div>
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">Shri Admin</p>
-              <p className="text-[10px] opacity-40 truncate">admin@shrifragrance.com</p>
+              <p className="text-[10px] opacity-40 truncate">{session?.email}</p>
             </div>
           </div>
         </div>

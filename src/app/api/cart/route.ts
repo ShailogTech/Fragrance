@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
-import { authErrorResponse, requireUserStrict } from '@/lib/server-auth'
+import { authErrorResponse, requireUserStrict, serverErrorResponse } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     const doc = await db.collection<CartDoc>('carts').findOne({ _id: user.uid })
     return NextResponse.json({ ok: true, items: doc?.items ?? [] })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/cart')
   }
 }
 
@@ -53,6 +53,6 @@ export async function PUT(req: Request) {
     )
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/cart')
   }
 }

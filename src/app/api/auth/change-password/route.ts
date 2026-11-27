@@ -1,6 +1,7 @@
+import { ObjectId } from 'mongodb'
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/mongodb'
-import { hashPassword, passwordPolicyError, verifyPassword, type UserDoc } from '@/lib/auth-core'
+import { hashPassword, newTokenVersion, passwordPolicyError, verifyPassword, type UserDoc } from '@/lib/auth-core'
 import { authErrorResponse, clearSessionCookie, requireUserStrict } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,12 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: Request) {
   try {
     const user = await requireUserStrict(req)
-    const body = (await req.json()) as { currentPassword?: string; newPassword?: string }
+    let body: { currentPassword?: string; newPassword?: string }
+    try {
+      body = (await req.json()) as typeof body
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid request.' }, { status: 400 })
+    }
     const currentPassword = body.currentPassword || ''
     const newPassword = body.newPassword || ''
     if (!currentPassword || !newPassword) {
@@ -26,7 +32,7 @@ export async function POST(req: Request) {
 
     const db = await getDb()
     const users = db.collection<UserDoc>('users')
-    const doc = await users.findOne({ email: user.email })
+    const doc = await users.findOne({ _id: new ObjectId(user.uid) })
     if (!doc) {
       return NextResponse.json(
         { ok: false, error: 'Account not found. Please sign up again.' },
@@ -36,11 +42,12 @@ export async function POST(req: Request) {
     if (!(await verifyPassword(currentPassword, doc.passwordHash))) {
       return NextResponse.json({ ok: false, error: 'Current password is incorrect.' }, { status: 401 })
     }
+    // A new token version ends every session of this account, on every
+    // device, including the one making this request.
     await users.updateOne(
       { _id: doc._id },
-      { $set: { passwordHash: await hashPassword(newPassword) } },
+      { $set: { passwordHash: await hashPassword(newPassword), tokenVersion: newTokenVersion() } },
     )
-    // Force a fresh sign-in everywhere after a password change.
     return clearSessionCookie(NextResponse.json({ ok: true }))
   } catch (e) {
     return authErrorResponse(e)

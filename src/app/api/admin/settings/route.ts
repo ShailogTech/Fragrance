@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { isMongoConfigured } from '@/lib/mongodb'
-import { authErrorResponse, requireAdmin } from '@/lib/server-auth'
+import { authErrorResponse, requireAdmin, serverErrorResponse } from '@/lib/server-auth'
 import { getSettings, publicSettings, saveSettings } from '@/lib/settings'
+import { ADMIN_EMAILS } from '@/lib/auth-core'
 import { MIN_ORDER_VALUE } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
   try {
     return NextResponse.json({ ok: true, settings: publicSettings(await getSettings()) })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/admin/settings')
   }
 }
 
@@ -132,7 +133,7 @@ export async function PUT(req: Request) {
       const smtpHost = (inc.smtpHost ?? current.email?.smtpHost ?? '').trim()
       const username = (inc.username ?? current.email?.username ?? '').trim()
       const fromAddress = (inc.fromAddress ?? current.email?.fromAddress ?? '').trim()
-      const ownerEmail = (inc.ownerEmail ?? current.email?.ownerEmail ?? 'admin@shrifragrance.com').trim()
+      const ownerEmail = (inc.ownerEmail ?? current.email?.ownerEmail ?? [...ADMIN_EMAILS][0] ?? '').trim()
       const siteUrl = (inc.siteUrl ?? current.email?.siteUrl ?? 'http://localhost:3000').trim().replace(/\/+$/, '')
       const smtpPort = Number(inc.smtpPort ?? current.email?.smtpPort ?? 587)
       if (!smtpHost || !username || !fromAddress) {
@@ -167,6 +168,6 @@ export async function PUT(req: Request) {
     await saveSettings(patch)
     return NextResponse.json({ ok: true, settings: publicSettings(await getSettings()) })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/admin/settings')
   }
 }

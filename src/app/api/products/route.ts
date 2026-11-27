@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
 import { adminProductsSeed, type AdminProduct } from '@/lib/catalog-data'
-import { authErrorResponse, requireAdmin } from '@/lib/server-auth'
+import { authErrorResponse, requireAdmin, serverErrorResponse } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,7 @@ export async function GET() {
     }
     return NextResponse.json({ ok: true, products: strip(docs) })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/products')
   }
 }
 
@@ -61,6 +61,6 @@ export async function PUT(req: Request) {
     }
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/products')
   }
 }

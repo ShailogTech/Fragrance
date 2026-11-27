@@ -2,14 +2,24 @@
 //
 // The app authenticates against its own /api/auth/* routes (local MongoDB +
 // scrypt + HS256 session tokens — see src/lib/auth-core.ts). Clients send the
-// token as `Authorization: Bearer <token>`; it is verified here with a local
-// HMAC check, so routes never trust a client-supplied uid/email and no
-// external auth service is contacted.
+// token in the httpOnly session cookie or as `Authorization: Bearer <token>`;
+// it is verified here with a local HMAC check and against the account it was
+// issued for, so routes never trust a client-supplied uid/email, a deleted
+// account has no access, and no external auth service is contacted.
 //
 // Server-only — never import from a client component.
 
+import { ObjectId } from 'mongodb'
 import { NextResponse } from 'next/server'
-import { verifyToken, ADMIN_EMAILS, SESSION_COOKIE, SESSION_TTL_SECONDS } from './auth-core'
+import {
+  verifyToken,
+  ADMIN_EMAILS,
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  type TokenClaims,
+  type UserDoc,
+} from './auth-core'
+import { getDb, isMongoConfigured } from './mongodb'
 
 export interface VerifiedUser {
   uid: string
@@ -36,6 +46,24 @@ function cookieToken(req: Request): string | null {
   return null
 }
 
+// A token is only as valid as the account it was issued for: the user must
+// still exist and carry the same token version, so deleting the account or
+// changing its password ends every one of its sessions at once.
+async function sessionIsCurrent(claims: TokenClaims): Promise<boolean> {
+  if (!isMongoConfigured || !ObjectId.isValid(claims.sub)) return false
+  try {
+    const user = await getDb().then((db) =>
+      db.collection<UserDoc>('users').findOne(
+        { _id: new ObjectId(claims.sub) },
+        { projection: { tokenVersion: 1 } },
+      ),
+    )
+    return user?.tokenVersion === claims.tv
+  } catch {
+    return false
+  }
+}
+
 /**
  * Verify the request's session token (Authorization: Bearer header or the
  * httpOnly session cookie). Returns null when the request carries no token;
@@ -46,11 +74,11 @@ export async function requireUser(req: Request): Promise<VerifiedUser | null> {
   if (!token) return null
 
   const claims = verifyToken(token)
-  if (!claims) {
+  if (!claims || !(await sessionIsCurrent(claims))) {
     throw new AuthError(401, 'Invalid or expired session. Please sign in again.')
   }
   const email = claims.email.toLowerCase()
-  return { uid: claims.sub, email, isAdmin: ADMIN_EMAILS.has(email) || claims.role === 'admin' }
+  return { uid: claims.sub, email, isAdmin: ADMIN_EMAILS.has(email) }
 }
 
 /** Like requireUser, but responds 401 when no token is present. */
@@ -76,15 +104,35 @@ export class AuthError extends Error {
   }
 }
 
-/** Convert an AuthError (or any error) into a JSON response. */
+/** Convert an AuthError into a JSON response; anything else is a fault. */
 export function authErrorResponse(e: unknown): NextResponse {
   if (e instanceof AuthError) {
     return NextResponse.json({ ok: false, error: e.message }, { status: e.status })
   }
+  return serverErrorResponse(e, 'auth')
+}
+
+/**
+ * 500 for an unexpected failure: the real error goes to the server log and
+ * the client gets a message that reveals nothing about the inside.
+ */
+export function serverErrorResponse(e: unknown, context: string): NextResponse {
+  console.error(`[api] ${context}:`, e)
   return NextResponse.json(
-    { ok: false, error: e instanceof Error ? e.message : 'Unauthorized.' },
-    { status: 401 },
+    { ok: false, error: 'Something went wrong on our side. Please try again.' },
+    { status: 500 },
   )
+}
+
+/** The visitor's address as seen behind Cloudflare (used for throttling). */
+export function clientAddress(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
+  return (
+    req.headers.get('cf-connecting-ip') ||
+    forwarded ||
+    req.headers.get('x-real-ip') ||
+    'local'
+  ).slice(0, 64)
 }
 
 /**

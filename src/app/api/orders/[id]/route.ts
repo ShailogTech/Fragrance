@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
-import { authErrorResponse, requireUserStrict, type VerifiedUser } from '@/lib/server-auth'
+import { authErrorResponse, requireUserStrict, type VerifiedUser, serverErrorResponse } from '@/lib/server-auth'
 import { sendShippingNotification, type MailOrderView } from '@/lib/mailer'
 
 export const dynamic = 'force-dynamic'
@@ -57,7 +57,7 @@ export async function GET(
     }
     return NextResponse.json({ ok: true, order: { id, ...strip(order) } })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/orders/[id]')
   }
 }
 
@@ -143,6 +143,6 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/orders/[id]')
   }
 }

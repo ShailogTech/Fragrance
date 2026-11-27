@@ -1,35 +1,46 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
 import {
+  newTokenVersion,
   roleForEmail,
   signToken,
   verifyPassword,
   type UserDoc,
 } from '@/lib/auth-core'
-import { withSessionCookie } from '@/lib/server-auth'
+import { clientAddress, serverErrorResponse, withSessionCookie } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
-// Small in-memory brute-force guard (per email; resets after the window).
-const MAX_ATTEMPTS = 10
+// In-memory brute-force guards, reset after the window: per e-mail address
+// and per source address, so a password can't be guessed and e-mail
+// addresses can't be cycled through from one place either.
+const MAX_ATTEMPTS_PER_EMAIL = 10
+const MAX_ATTEMPTS_PER_ADDRESS = 30
 const WINDOW_MS = 5 * 60 * 1000
-const attempts = new Map<string, { count: number; resetAt: number }>()
+const MAX_PASSWORD_LENGTH = 200
 
-function tooManyAttempts(email: string): boolean {
-  const rec = attempts.get(email)
+type Bucket = { count: number; resetAt: number }
+const byEmail = new Map<string, Bucket>()
+const byAddress = new Map<string, Bucket>()
+
+function blocked(map: Map<string, Bucket>, key: string, max: number): boolean {
+  const rec = map.get(key)
   if (!rec) return false
   if (Date.now() > rec.resetAt) {
-    attempts.delete(email)
+    map.delete(key)
     return false
   }
-  return rec.count >= MAX_ATTEMPTS
+  return rec.count >= max
 }
 
-function recordFailure(email: string): void {
+function recordFailure(map: Map<string, Bucket>, key: string): void {
   const now = Date.now()
-  const rec = attempts.get(email)
+  const rec = map.get(key)
   if (!rec || now > rec.resetAt) {
-    attempts.set(email, { count: 1, resetAt: now + WINDOW_MS })
+    if (map.size > 5000) {
+      for (const [k, v] of map) if (now > v.resetAt) map.delete(k)
+    }
+    map.set(key, { count: 1, resetAt: now + WINDOW_MS })
   } else {
     rec.count += 1
   }
@@ -38,17 +49,23 @@ function recordFailure(email: string): void {
 // POST /api/auth/login  body = { email, password }
 export async function POST(req: Request) {
   if (!isMongoConfigured) {
-    return NextResponse.json({ ok: false, error: 'Database is not configured.' }, { status: 503 })
+    return NextResponse.json({ ok: false, error: 'Sign-in is temporarily unavailable.' }, { status: 503 })
   }
+  const address = clientAddress(req)
   let email = ''
   try {
-    const body = (await req.json()) as { email?: string; password?: string }
-    email = (body.email || '').trim().toLowerCase()
-    const password = body.password || ''
+    let body: { email?: string; password?: string }
+    try {
+      body = (await req.json()) as { email?: string; password?: string }
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid request.' }, { status: 400 })
+    }
+    email = String(body.email || '').trim().toLowerCase().slice(0, 200)
+    const password = String(body.password || '')
     if (!email || !password) {
       return NextResponse.json({ ok: false, error: 'Enter email and password.' }, { status: 400 })
     }
-    if (tooManyAttempts(email)) {
+    if (blocked(byEmail, email, MAX_ATTEMPTS_PER_EMAIL) || blocked(byAddress, address, MAX_ATTEMPTS_PER_ADDRESS)) {
       return NextResponse.json(
         { ok: false, error: 'Too many attempts. Try again in a few minutes.' },
         { status: 429 },
@@ -56,25 +73,35 @@ export async function POST(req: Request) {
     }
 
     const db = await getDb()
-    const user = await db.collection<UserDoc>('users').findOne({ email })
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
-      recordFailure(email)
+    const users = db.collection<UserDoc>('users')
+    const user = await users.findOne({ email })
+    const passwordOk =
+      !!user && password.length <= MAX_PASSWORD_LENGTH && (await verifyPassword(password, user.passwordHash))
+    if (!passwordOk) {
+      recordFailure(byEmail, email)
+      recordFailure(byAddress, address)
       return NextResponse.json(
         { ok: false, error: 'Invalid credentials. If you have no account yet, sign up at /signup.' },
         { status: 401 },
       )
     }
-    attempts.delete(email)
+    byEmail.delete(email)
 
     const name = user.name || email.split('@')[0]
     const role = roleForEmail(email)
-    const token = signToken({ sub: String(user._id), email, name, role })
+    // Accounts created before token versions existed get one on first sign-in.
+    let tokenVersion = user.tokenVersion
+    if (!tokenVersion) {
+      tokenVersion = newTokenVersion()
+      await users.updateOne({ _id: user._id }, { $set: { tokenVersion } })
+    }
+    const token = signToken({ sub: String(user._id), email, name, role, tv: tokenVersion })
     return withSessionCookie(
-      NextResponse.json({ ok: true, token, session: { email, name, role } }),
+      NextResponse.json({ ok: true, session: { email, name, role } }),
       req,
       token,
     )
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'auth login')
   }
 }

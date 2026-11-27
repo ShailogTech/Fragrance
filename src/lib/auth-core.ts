@@ -18,8 +18,14 @@ const scrypt = promisify(scryptCb) as (
   keylen: number,
 ) => Promise<Buffer>
 
-// Admin allowlist — same rule the previous Firebase setup used.
-export const ADMIN_EMAILS = new Set(['admin@shrifragrance.com'])
+// Admin allowlist. It comes from ADMIN_EMAILS (comma separated) in the
+// environment, so the admin identity is not published with the code.
+export const ADMIN_EMAILS: ReadonlySet<string> = new Set(
+  (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+)
 
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
 
@@ -43,6 +49,13 @@ export interface UserDoc {
   passwordHash: string
   role: 'admin' | 'customer'
   createdAt: Date
+  // Changes whenever the password does; embedded in every session token.
+  tokenVersion?: string
+}
+
+/** Fresh per-account value for session tokens (see UserDoc.tokenVersion). */
+export function newTokenVersion(): string {
+  return randomBytes(16).toString('hex')
 }
 
 export function roleForEmail(email: string): 'admin' | 'customer' {
@@ -104,6 +117,7 @@ export interface TokenClaims {
   email: string
   name: string
   role: 'admin' | 'customer'
+  tv: string
   iat: number
   exp: number
 }
@@ -127,7 +141,7 @@ export function verifyToken(token: string): TokenClaims | null {
     if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null
     const claims = JSON.parse(fromB64url(body).toString('utf8')) as TokenClaims
     if (typeof claims.exp !== 'number' || claims.exp * 1000 < Date.now()) return null
-    if (!claims.sub || !claims.email) return null
+    if (!claims.sub || !claims.email || typeof claims.tv !== 'string') return null
     return claims
   } catch {
     return null

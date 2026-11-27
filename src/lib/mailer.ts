@@ -6,6 +6,7 @@
 // context but without credentials.
 
 import nodemailer, { type Transporter } from 'nodemailer'
+import { ADMIN_EMAILS } from './auth-core'
 import { getSettings, type EmailSettings } from './settings'
 
 export interface MailOrderView {
@@ -143,10 +144,12 @@ export async function sendOrderConfirmation(order: MailOrderView): Promise<void>
 /** Owner/admin: new order alert. */
 export async function sendOwnerNewOrderAlert(order: MailOrderView): Promise<void> {
   const t = await getTransport()
-  if (!t) return
+  // Without a configured owner address the alert goes to the first admin.
+  const to = t && (t.cfg.ownerEmail || [...ADMIN_EMAILS][0])
+  if (!t || !to) return
   try {
     await send(
-      t.cfg.ownerEmail || 'admin@shrifragrance.com',
+      to,
       `New order ${order.id} — ₹${order.total}`,
       wrap(`
         <p><strong>New order received</strong></p>

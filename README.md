@@ -1,17 +1,18 @@
 # Shri Fragrance — E-commerce (Next.js)
 
-Full storefront + admin dashboard with Firebase authentication, MongoDB Atlas
-persistence, Shiprocket shipping, transactional email, and a ₹500 minimum
+Full storefront + admin dashboard with its own e-mail/password sign-in,
+MongoDB persistence, Shiprocket shipping, transactional email, and a ₹500 minimum
 order. Designed to run as a Node server (e.g. self-hosted Windows).
 
 ## Admin access
 
 - **URL:** `/admin` (sign in on `/login` first — the dashboard switches to the
   admin view automatically)
-- **Login email:** `admin@shrifragrance.com`
-- **Password:** managed in **Firebase Console → Authentication → Users** (use
-  *Reset password* there, or the forgot-password link on `/login`, which emails
-  `admin@shrifragrance.com`). Admin rights are tied to this email.
+- **Admin identity:** the address listed in `ADMIN_EMAILS` in `.env`. Admin
+  rights are tied to it, and it is not stored anywhere in the repository.
+- **Password:** create or reset the account with `node scripts/seed-admin.mjs`
+  (prints a generated password once, or pass your own). Changing the password
+  signs out every device.
 
 ## Configuration (Admin → Settings)
 
@@ -39,6 +40,8 @@ Create `.env` in the project root:
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net
 # Required: session signing secret (generate: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
 AUTH_SECRET=<64+ hex chars>
+# Required: the address that runs the store (admin rights are tied to it)
+ADMIN_EMAILS=<you@yourdomain>
 # optional overrides
 MONGODB_DB=shrifragrance
 PORT=3000
@@ -91,5 +94,5 @@ baseline (autocannon, zero errors) and how to reproduce it on the server.
 ## Security notes
 
 See `security-audit-artifacts/SECURITY-AUDIT.md` for the full audit. API
-routes verify Firebase ID tokens server-side; SMTP and Shiprocket passwords
+routes verify the session cookie against the account it belongs to; SMTP and Shiprocket passwords
 are write-only secrets stored in the `settings` MongoDB collection.

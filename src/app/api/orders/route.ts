@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb, isMongoConfigured } from '@/lib/mongodb'
 import { adminProductsSeed } from '@/lib/catalog-data'
-import { AuthError, authErrorResponse, requireUser, type VerifiedUser } from '@/lib/server-auth'
+import { AuthError, authErrorResponse, requireUser, type VerifiedUser, serverErrorResponse } from '@/lib/server-auth'
 import { getSettings } from '@/lib/settings'
 import { MIN_ORDER_VALUE, SHIPPING_EXPRESS, SHIPPING_STANDARD } from '@/lib/constants'
 import { createShiprocketOrder, ShiprocketError, type ShippingOrderInput } from '@/lib/shiprocket'
@@ -89,7 +89,7 @@ export async function GET(req: Request) {
     }
     return NextResponse.json({ ok: true, orders: docs })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/orders')
   }
 }
 
@@ -199,7 +199,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+    return serverErrorResponse(e, 'api/orders')
   }
 }
 
